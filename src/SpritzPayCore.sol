@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: UNLICENSED
 
-import "openzeppelin-5/access/extensions/AccessControlEnumerable.sol";
-import "openzeppelin-5/token/ERC20/IERC20.sol";
-import "openzeppelin-5/token/ERC20/utils/SafeERC20.sol";
-import "openzeppelin-5/utils/structs/EnumerableSet.sol";
+import "@openzeppelin/contracts/access/extensions/AccessControlEnumerable.sol";
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 
 pragma solidity ^0.8.26;
 
