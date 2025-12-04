@@ -2,6 +2,9 @@
 cache/
 out/
 
+# Dependencies (restored via `forge install` or `git submodule update --init --recursive`)
+lib/
+
 # Ignores development broadcast logs
 !/broadcast
 /broadcast/*/31337/
