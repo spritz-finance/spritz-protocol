@@ -1,29 +1,17 @@
-// SPDX-License-Identifier: UNLICENSED
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.30;
 
-import "@openzeppelin/contracts/access/extensions/AccessControlEnumerable.sol";
-import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
-
-pragma solidity ^0.8.26;
+import {Ownable} from "solady/auth/Ownable.sol";
+import {SafeTransferLib} from "solady/utils/SafeTransferLib.sol";
+import {EnumerableSetLib} from "solady/utils/EnumerableSetLib.sol";
 
 /**
  * @title SpritzPayCore
- * @dev This contract acts as the core payment infrastructure for the Spritz Finance protocol
+ * @dev Core payment infrastructure for Spritz Finance protocol.
+ * Uses Solady for gas-efficient ownership and token transfers.
  */
-contract SpritzPayCore is AccessControlEnumerable {
-    using EnumerableSet for EnumerableSet.AddressSet;
-    using SafeERC20 for IERC20;
-
-    /**
-     * @notice Thrown when sweeping the contract fails
-     */
-    error FailedSweep();
-
-    /**
-     * @notice Thrown when calling the initializer after already being initialized
-     */
-    error Initialized();
+contract SpritzPayCore is Ownable {
+    using EnumerableSetLib for EnumerableSetLib.AddressSet;
 
     /**
      * @notice Thrown when paying with unrecognized token
@@ -49,18 +37,19 @@ contract SpritzPayCore is AccessControlEnumerable {
     );
 
     /// @notice List of all accepted payment tokens
-    EnumerableSet.AddressSet internal _acceptedPaymentTokens;
-
-    bool private _initialized;
+    EnumerableSetLib.AddressSet internal _acceptedPaymentTokens;
 
     mapping(address => address) public tokenRecipients;
 
     constructor() payable {}
 
+    /// @dev Prevents double-initialization (Solady pattern)
+    function _guardInitializeOwner() internal pure override returns (bool) {
+        return true;
+    }
+
     function initialize(address admin) external {
-        if (_initialized) revert Initialized();
-        _initialized = true;
-        _grantRole(DEFAULT_ADMIN_ROLE, admin);
+        _initializeOwner(admin);
     }
 
     /**
@@ -87,7 +76,7 @@ contract SpritzPayCore is AccessControlEnumerable {
         if (_paymentRecipient == address(0))
             revert TokenNotAccepted(paymentToken);
 
-        IERC20(paymentToken).safeTransfer(_paymentRecipient, paymentAmount);
+        SafeTransferLib.safeTransfer(paymentToken, _paymentRecipient, paymentAmount);
 
         emit Payment(
             _paymentRecipient,
@@ -112,9 +101,7 @@ contract SpritzPayCore is AccessControlEnumerable {
      * @dev Get all accepted payment tokens
      * @return Whether this payment token is accepted
      */
-    function isAcceptedToken(
-        address tokenAddress
-    ) external view returns (bool) {
+    function isAcceptedToken(address tokenAddress) external view returns (bool) {
         return _acceptedPaymentTokens.contains(tokenAddress);
     }
 
@@ -122,32 +109,26 @@ contract SpritzPayCore is AccessControlEnumerable {
      * @dev Get the payment recipient for a token
      * @return The address of the payment recipient
      */
-    function paymentRecipient(
-        address tokenAddress
-    ) external view returns (address) {
+    function paymentRecipient(address tokenAddress) external view returns (address) {
         return tokenRecipients[tokenAddress];
     }
 
     /**
      * @dev Adds an accepted payment token
      */
-    function addPaymentToken(
-        address newToken,
-        address recipient
-    ) external onlyRole(DEFAULT_ADMIN_ROLE) {
+    function addPaymentToken(address token, address recipient) external onlyOwner {
+        if (token == address(0)) revert ZeroAddress();
         if (recipient == address(0)) revert ZeroAddress();
-        _acceptedPaymentTokens.add(newToken);
-        tokenRecipients[newToken] = recipient;
+        _acceptedPaymentTokens.add(token);
+        tokenRecipients[token] = recipient;
     }
 
     /**
-     * @dev Adds an accepted payment token
+     * @dev Removes an accepted payment token
      */
-    function removePaymentToken(
-        address newToken
-    ) external onlyRole(DEFAULT_ADMIN_ROLE) {
-        _acceptedPaymentTokens.remove(newToken);
-        delete tokenRecipients[newToken];
+    function removePaymentToken(address token) external onlyOwner {
+        _acceptedPaymentTokens.remove(token);
+        delete tokenRecipients[token];
     }
 
     /**
@@ -155,10 +136,10 @@ contract SpritzPayCore is AccessControlEnumerable {
      * @param token Token to withdraw
      * @param to Target address
      */
-    function sweep(
-        IERC20 token,
-        address to
-    ) external onlyRole(DEFAULT_ADMIN_ROLE) {
-        token.safeTransfer(to, token.balanceOf(address(this)));
+    function sweep(address token, address to) external onlyOwner {
+        uint256 balance = SafeTransferLib.balanceOf(token, address(this));
+        if (balance > 0) {
+            SafeTransferLib.safeTransfer(token, to, balance);
+        }
     }
 }
