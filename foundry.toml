@@ -2,13 +2,48 @@
 src = "src"
 out = "out"
 libs = ["lib"]
+
+# Compiler settings - LOCKED for reproducible builds
 solc = "0.8.30"
+evm_version = "cancun"
 optimizer = true
-optimizer-runs = 10_000_000
-auto_detect_solc = true
+optimizer_runs = 10_000_000
+via_ir = false
+auto_detect_solc = false
+
+# Disable metadata for deterministic bytecode across builds
+cbor_metadata = false
+bytecode_hash = "none"
+
+# Build info for verification
+build_info = true
+extra_output = ["storageLayout", "metadata"]
+
+# Allow reading deployment artifacts for scripts
+fs_permissions = [{ access = "read", path = "deployments" }]
+
 remappings = [
     "@openzeppelin/=lib/openzeppelin-contracts/",
     "solady/=lib/solady/src/"
 ]
+
+[rpc_endpoints]
+mainnet = "${MAINNET_RPC_URL}"
+sepolia = "${SEPOLIA_RPC_URL}"
+arbitrum = "${ARBITRUM_RPC_URL}"
+base = "${BASE_RPC_URL}"
+optimism = "${OPTIMISM_RPC_URL}"
+polygon = "${POLYGON_RPC_URL}"
+
+# Etherscan V2 API - same key works for all chains
+[etherscan]
+mainnet = { key = "IFB6M2MYCIY6WKFH5VXQH1JDWGT4MXVDD6" }
+sepolia = { key = "IFB6M2MYCIY6WKFH5VXQH1JDWGT4MXVDD6" }
+arbitrum = { key = "IFB6M2MYCIY6WKFH5VXQH1JDWGT4MXVDD6" }
+base = { key = "IFB6M2MYCIY6WKFH5VXQH1JDWGT4MXVDD6" }
+optimism = { key = "IFB6M2MYCIY6WKFH5VXQH1JDWGT4MXVDD6" }
+polygon = { key = "IFB6M2MYCIY6WKFH5VXQH1JDWGT4MXVDD6" }
+avalanche = { key = "IFB6M2MYCIY6WKFH5VXQH1JDWGT4MXVDD6" }
+bsc = { key = "IFB6M2MYCIY6WKFH5VXQH1JDWGT4MXVDD6" }
 
 # See more config options https://github.com/foundry-rs/foundry/blob/master/crates/config/README.md#all-options

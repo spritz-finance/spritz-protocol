@@ -83,7 +83,7 @@ interface ISpritzRouter {
     /// @param amount The payment amount
     /// @param paymentReference Unique identifier for the payment
     /// @param permit The permit signature data signed by owner
-    function payOnBehalf(
+    function payWithTokenOnBehalf(
         address owner,
         address token,
         uint256 amount,

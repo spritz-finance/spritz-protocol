@@ -1,66 +1,165 @@
-## Foundry
+# Spritz Protocol
 
-**Foundry is a blazing fast, portable and modular toolkit for Ethereum application development written in Rust.**
+Payment infrastructure for crypto-to-fiat payments with optional token swaps.
 
-Foundry consists of:
+## Contracts
 
--   **Forge**: Ethereum testing framework (like Truffle, Hardhat and DappTools).
--   **Cast**: Swiss army knife for interacting with EVM smart contracts, sending transactions and getting chain data.
--   **Anvil**: Local Ethereum node, akin to Ganache, Hardhat Network.
--   **Chisel**: Fast, utilitarian, and verbose solidity REPL.
+- **SpritzPayCore**: Core payment processing with token allowlisting and recipient management
+- **SpritzRouter**: Payment router with swap support via pluggable swap modules
 
-## Documentation
+## Deterministic Deployment
 
-https://book.getfoundry.sh/
+Contracts are deployed via [CreateX](https://github.com/pcaversaccio/createx) using CREATE3 for identical addresses across all chains.
 
-## Usage
+### Deployed Addresses
+
+| Contract | Address |
+|----------|---------|
+| SpritzPayCore | `0x000000000012F55170d4A2aB5ace512Eeb925Dca` |
+| SpritzRouter | `0x0A2d7D9BFE42D5146Af53dce8ef4956F148C2a5F` |
+
+## Development
+
+### Prerequisites
+
+- [Foundry](https://book.getfoundry.sh/getting-started/installation)
+- Node.js
 
 ### Build
 
-```shell
-$ forge build
+```bash
+forge build
 ```
 
 ### Test
 
-```shell
-$ forge test
+```bash
+forge test
 ```
 
-### Format
+### Test Deployment (Fork)
 
-```shell
-$ forge fmt
+Simulate deployment on a forked chain without needing a private key:
+
+```bash
+ADMIN_ADDRESS=0xYourAdmin forge script script/Deploy.s.sol:DeploySpritzForkTest --rpc-url https://eth.llamarpc.com
 ```
 
-### Gas Snapshots
+## Freezing Contracts for Deployment
 
-```shell
-$ forge snapshot
+Frozen bytecode packages ensure identical deployments across all chains. Each contract has its own frozen package in `deployments/<ContractName>/`.
+
+### Freeze a Contract
+
+```bash
+node scripts/freeze.js SpritzPayCore
 ```
 
-### Anvil
+This creates `deployments/SpritzPayCore/` containing:
+- `artifacts/*.initcode` - Deployment bytecode
+- `artifacts/*.deployed` - Runtime bytecode
+- `artifacts/*.json` - Full compiler output
+- `verify/standard-json-input.json` - Etherscan verification
+- `src/` - Source code snapshot
+- `foundry.toml` - Compiler settings
+- `metadata.json` - Build metadata with initcode hash
+- `checksums.sha256` - File checksums
 
-```shell
-$ anvil
+### List Frozen Contracts
+
+```bash
+node scripts/freeze.js --list
 ```
 
-### Deploy
+### Delete a Frozen Build
 
-```shell
-$ forge script script/Counter.s.sol:CounterScript --rpc-url <your_rpc_url> --private-key <your_private_key>
+To re-freeze after changes:
+
+```bash
+node scripts/freeze.js --delete SpritzPayCore
+node scripts/freeze.js SpritzPayCore
 ```
 
-### Cast
+### Compiler Settings
 
-```shell
-$ cast <subcommand>
+The `foundry.toml` is configured for reproducible builds:
+
+```toml
+solc = "0.8.30"
+evm_version = "cancun"
+optimizer = true
+optimizer_runs = 10_000_000
+cbor_metadata = false      # Disables metadata hash
+bytecode_hash = "none"     # Ensures identical bytecode
 ```
 
-### Help
+Do not change these settings after deployment begins.
 
-```shell
-$ forge --help
-$ anvil --help
-$ cast --help
+## Generating Vanity Salts
+
+Mine CREATE3 salts for vanity addresses using [createXcrunch](https://github.com/HrikB/createXcrunch):
+
+```bash
+./createXcrunch create3 \
+  --caller 0xYourDeployerAddress \
+  --matching badface
 ```
+
+**Important**: Do NOT use the `--crosschain` flag. Omitting it produces salts with `0x00` in byte 21, giving the same address on all chains.
+
+Salt format: `[deployer (20 bytes)][0x00][entropy (11 bytes)]`
+
+## Production Deployment
+
+### Update Deploy Script
+
+Add salts and initcode hashes to `script/Deploy.s.sol`:
+
+```solidity
+bytes32 public constant CORE_SALT = 0x...;
+bytes32 public constant ROUTER_SALT = 0x...;
+bytes32 public constant CORE_INITCODE_HASH = 0x...;  // from metadata.json
+bytes32 public constant ROUTER_INITCODE_HASH = 0x...;
+```
+
+### Using Encrypted Keystore
+
+```bash
+# Import your key (one-time setup)
+cast wallet import deployer --interactive
+
+# Deploy
+ADMIN_ADDRESS=0xYourAdmin forge script script/Deploy.s.sol:DeploySpritz \
+  --rpc-url $RPC_URL \
+  --account deployer \
+  --broadcast
+```
+
+### Using Ledger
+
+```bash
+ADMIN_ADDRESS=0xYourAdmin forge script script/Deploy.s.sol:DeploySpritz \
+  --rpc-url $RPC_URL \
+  --ledger \
+  --broadcast
+```
+
+## Contract Verification
+
+After deployment, verify using the standard JSON input files in `deployments/<ContractName>/verify/`:
+
+```bash
+forge verify-contract <DEPLOYED_ADDRESS> SpritzPayCore \
+  --chain-id <CHAIN_ID> \
+  --verifier-url <EXPLORER_API_URL> \
+  --verifier etherscan
+```
+
+## Post-Deployment Setup
+
+1. **Add payment tokens**: `core.addPaymentToken(token, recipient)`
+2. **Set swap module**: `router.setSwapModule(swapModuleAddress)`
+
+## License
+
+MIT

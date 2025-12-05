@@ -343,6 +343,8 @@ contract SpritzPayCoreTest is Test {
     function testFuzz_AddPaymentToken(address token, address tokenRecipient) public {
         vm.assume(token != address(0));
         vm.assume(tokenRecipient != address(0));
+        // Solady EnumerableSetLib uses this as a zero sentinel
+        vm.assume(token != address(0x0000000000000000000000fbb67FDa52D4Bfb8Bf));
 
         vm.prank(admin);
         spritzPay.addPaymentToken(token, tokenRecipient);

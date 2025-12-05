@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# Freeze a contract for deployment
+# Usage: ./scripts/freeze <ContractName>
+
+set -e
+cd "$(dirname "$0")"
+node scripts/freeze.js "$@"

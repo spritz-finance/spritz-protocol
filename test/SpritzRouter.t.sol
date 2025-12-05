@@ -83,6 +83,11 @@ contract SpritzRouterTest is Test {
         new SpritzRouter(address(0));
     }
 
+    function test_RevertWhen_ConstructedWithEOACore() public {
+        vm.expectRevert(SpritzRouter.NotAContract.selector);
+        new SpritzRouter(makeAddr("eoa"));
+    }
+
     function test_RevertWhen_InitializeWithZeroOwner() public {
         SpritzRouter newRouter = new SpritzRouter(address(core));
         vm.expectRevert(SpritzRouter.ZeroAddress.selector);
@@ -108,6 +113,18 @@ contract SpritzRouterTest is Test {
     function test_RevertWhen_NonOwnerSetsSwapModule() public {
         vm.expectRevert(Ownable.Unauthorized.selector);
         router.setSwapModule(address(swapModule));
+    }
+
+    function test_RevertWhen_SetSwapModuleToEOA() public {
+        vm.prank(admin);
+        vm.expectRevert(SpritzRouter.NotAContract.selector);
+        router.setSwapModule(makeAddr("eoa"));
+    }
+
+    function test_SetSwapModuleToZero() public {
+        vm.prank(admin);
+        router.setSwapModule(address(0));
+        assertEq(address(router.swapModule()), address(0));
     }
 
     // ============ Direct Payment Tests ============
@@ -451,7 +468,7 @@ contract SpritzRouterTest is Test {
 
     // ============ Meta-Transaction Tests ============
 
-    function test_PayOnBehalf() public {
+    function test_PayWithTokenOnBehalf() public {
         uint256 amount = 1000e18;
         bytes32 paymentRef = keccak256("on-behalf-payment");
         address relayer = makeAddr("relayer");
@@ -471,7 +488,7 @@ contract SpritzRouterTest is Test {
         emit Payment(recipient, payer, address(permitToken), amount, address(permitToken), amount, paymentRef);
 
         vm.prank(relayer);
-        router.payOnBehalf(payer, address(permitToken), amount, paymentRef, permit);
+        router.payWithTokenOnBehalf(payer, address(permitToken), amount, paymentRef, permit);
 
         assertEq(permitToken.balanceOf(recipient), amount);
         assertEq(permitToken.balanceOf(payer), 0);
@@ -601,6 +618,60 @@ contract SpritzRouterTest is Test {
         router.payWithToken(fakeToken, amount, bytes32(0));
     }
 
+    function testFuzz_FailedPaymentPreservesUserBalance(uint256 amount) public {
+        amount = bound(amount, 1, type(uint128).max);
+
+        // Use unaccepted token
+        sourceToken.mint(payer, amount);
+
+        uint256 payerBalanceBefore = sourceToken.balanceOf(payer);
+
+        vm.prank(payer);
+        sourceToken.approve(address(router), amount);
+
+        // This should revert because sourceToken is not accepted
+        vm.prank(payer);
+        vm.expectRevert();
+        router.payWithToken(address(sourceToken), amount, bytes32(0));
+
+        // Payer's balance should be unchanged
+        assertEq(sourceToken.balanceOf(payer), payerBalanceBefore, "User balance should be preserved on revert");
+        assertEq(sourceToken.balanceOf(address(router)), 0, "Router should have no tokens");
+        assertEq(sourceToken.balanceOf(address(core)), 0, "Core should have no tokens");
+    }
+
+    function testFuzz_FailedSwapPreservesUserBalance(uint256 amount) public {
+        amount = bound(amount, 1, type(uint128).max);
+
+        sourceToken.mint(payer, amount);
+
+        uint256 payerBalanceBefore = sourceToken.balanceOf(payer);
+
+        vm.prank(payer);
+        sourceToken.approve(address(router), amount);
+
+        // Use unaccepted payment token to force revert after swap
+        ISpritzRouter.SwapPaymentParams memory swapParams = ISpritzRouter.SwapPaymentParams({
+            swapType: ISwapModule.SwapType.ExactOutput,
+            sourceToken: address(sourceToken),
+            sourceAmount: amount,
+            paymentAmount: amount / 2,
+            deadline: block.timestamp + 1 hours,
+            swapData: ""
+        });
+
+        // This should revert because alternativeToken is not accepted
+        ERC20Mock unacceptedToken = new ERC20Mock();
+
+        vm.prank(payer);
+        vm.expectRevert();
+        router.payWithSwap(address(unacceptedToken), swapParams, bytes32(0));
+
+        // Payer's balance should be unchanged
+        assertEq(sourceToken.balanceOf(payer), payerBalanceBefore, "User balance should be preserved on revert");
+        assertEq(sourceToken.balanceOf(address(router)), 0, "Router should have no tokens");
+    }
+
     // ============ Permit Fuzz Tests ============
 
     function testFuzz_PayWithPermit(uint256 amount) public {
@@ -717,7 +788,7 @@ contract SpritzRouterTest is Test {
         router.payWithToken(address(permitToken), amount, paymentRef2, permit);
     }
 
-    function testFuzz_PayOnBehalf_DifferentRelayer(address relayer) public {
+    function testFuzz_PayWithTokenOnBehalf_DifferentRelayer(address relayer) public {
         vm.assume(relayer != address(0));
         vm.assume(relayer != payer);
 
@@ -737,7 +808,7 @@ contract SpritzRouterTest is Test {
 
         // Any relayer can submit
         vm.prank(relayer);
-        router.payOnBehalf(payer, address(permitToken), amount, paymentRef, permit);
+        router.payWithTokenOnBehalf(payer, address(permitToken), amount, paymentRef, permit);
 
         assertEq(permitToken.balanceOf(recipient), amount);
         assertEq(permitToken.balanceOf(payer), 0);
@@ -811,6 +882,14 @@ contract SpritzRouterInvariantTest is Test {
             paymentToken.balanceOf(address(router)),
             0,
             "Router should never hold tokens"
+        );
+    }
+
+    function invariant_CoreNeverHoldsTokens() public view {
+        assertEq(
+            paymentToken.balanceOf(address(core)),
+            0,
+            "Core should never hold tokens after payment"
         );
     }
 

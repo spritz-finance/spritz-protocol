@@ -23,6 +23,9 @@ contract SpritzRouter is ISpritzRouter, Ownable, ReentrancyGuard {
     /// @notice Thrown when a zero address is provided where not allowed
     error ZeroAddress();
 
+    /// @notice Thrown when an address has no code (not a contract)
+    error NotAContract();
+
     /// @notice Thrown when a swap deadline has passed
     error DeadlineExpired();
 
@@ -45,6 +48,7 @@ contract SpritzRouter is ISpritzRouter, Ownable, ReentrancyGuard {
     /// @param _core Address of the SpritzPayCore contract
     constructor(address _core) payable {
         if (_core == address(0)) revert ZeroAddress();
+        if (_core.code.length == 0) revert NotAContract();
         core = ISpritzPayCore(_core);
     }
 
@@ -67,6 +71,9 @@ contract SpritzRouter is ISpritzRouter, Ownable, ReentrancyGuard {
     /// @dev Set to address(0) to disable swaps
     /// @param newSwapModule Address of the new swap module
     function setSwapModule(address newSwapModule) external onlyOwner {
+        if (newSwapModule != address(0) && newSwapModule.code.length == 0) {
+            revert NotAContract();
+        }
         swapModule = ISwapModule(newSwapModule);
     }
 
@@ -119,7 +126,7 @@ contract SpritzRouter is ISpritzRouter, Ownable, ReentrancyGuard {
     /// @param amount The payment amount
     /// @param paymentReference Unique identifier for the payment
     /// @param permit The permit signature data signed by owner
-    function payOnBehalf(
+    function payWithTokenOnBehalf(
         address owner,
         address token,
         uint256 amount,

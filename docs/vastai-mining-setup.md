@@ -32,12 +32,19 @@ echo "=== OpenCL Platforms ==="
 clinfo -l
 ```
 
+## Important: Crosschain Flag
+
+**`--crosschain 0`** = Same contract address on ALL chains (recommended)
+**`--crosschain 1`** = Different address per chain (includes chainid in salt guard)
+
+For protocols deploying across multiple chains, use `--crosschain 0` to get identical addresses everywhere.
+
 ## Run Mining (single GPU)
 
 ```bash
 ./target/release/createxcrunch create3 \
   --caller 0xbadfaceB351045374d7fd1d3915e62501BA9916C \
-  --crosschain 1 \
+  --crosschain 0 \
   --leading 5 \
   --gpu-device-id 0
 ```
@@ -49,14 +56,14 @@ cd /workspace/createXcrunch
 
 nohup ./target/release/createxcrunch create3 \
   --caller 0xbadfaceB351045374d7fd1d3915e62501BA9916C \
-  --crosschain 1 \
+  --crosschain 0 \
   --leading 6 \
   --gpu-device-id 0 \
   --output output0.txt > log0.txt 2>&1 &
 
 nohup ./target/release/createxcrunch create3 \
   --caller 0xbadfaceB351045374d7fd1d3915e62501BA9916C \
-  --crosschain 1 \
+  --crosschain 0 \
   --leading 6 \
   --gpu-device-id 1 \
   --output output1.txt > log1.txt 2>&1 &
@@ -85,7 +92,7 @@ sudo mv /etc/OpenCL/vendors/pocl.icd /etc/OpenCL/vendors/pocl.icd.disabled 2>/de
 cd /workspace/createXcrunch
 ./target/release/createxcrunch create3 \
   --caller 0xbadfaceB351045374d7fd1d3915e62501BA9916C \
-  --crosschain 1 \
+  --crosschain 0 \
   --leading 6 \
   --gpu-device-id 0
 ```
