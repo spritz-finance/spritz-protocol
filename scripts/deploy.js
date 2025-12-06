@@ -185,6 +185,115 @@ function checkOpSignedIn() {
   }
 }
 
+function checkRpcHealth(chain, chainName) {
+  try {
+    const blockNumber = execSync(`cast block-number --rpc-url ${chain.rpc}`, {
+      encoding: "utf8",
+      timeout: 10000,
+    }).trim();
+    return { healthy: true, blockNumber: parseInt(blockNumber) };
+  } catch (e) {
+    return { healthy: false, error: e.message };
+  }
+}
+
+function getFrozenInitcode(contractName) {
+  const initcodePath = path.join(
+    DEPLOYMENTS_DIR,
+    contractName,
+    "artifacts",
+    `${contractName}.initcode`,
+  );
+  if (!fs.existsSync(initcodePath)) {
+    return null;
+  }
+  return fs.readFileSync(initcodePath, "utf8").trim();
+}
+
+function getFrozenDeployedBytecode(contractName) {
+  const deployedPath = path.join(
+    DEPLOYMENTS_DIR,
+    contractName,
+    "artifacts",
+    `${contractName}.deployed`,
+  );
+  if (!fs.existsSync(deployedPath)) {
+    return null;
+  }
+  return fs.readFileSync(deployedPath, "utf8").trim();
+}
+
+function verifyFrozenBytecode(contractName) {
+  const metadata = getDeploymentMetadata(contractName);
+  if (!metadata) {
+    return { valid: false, error: "No metadata found" };
+  }
+
+  const initcode = getFrozenInitcode(contractName);
+  if (!initcode) {
+    return { valid: false, error: "No frozen initcode found" };
+  }
+
+  const computedHash = execSync(`cast keccak ${initcode}`, {
+    encoding: "utf8",
+  }).trim();
+
+  if (computedHash.toLowerCase() !== metadata.initcodeHash.toLowerCase()) {
+    return {
+      valid: false,
+      error: `Initcode hash mismatch. Expected ${metadata.initcodeHash}, got ${computedHash}`,
+    };
+  }
+
+  return { valid: true, initcodeHash: metadata.initcodeHash };
+}
+
+function checkAlreadyDeployed(chain, address) {
+  try {
+    const code = execSync(`cast code ${address} --rpc-url ${chain.rpc}`, {
+      encoding: "utf8",
+      timeout: 10000,
+    }).trim();
+    return code !== "0x" && code !== "";
+  } catch {
+    return false;
+  }
+}
+
+function verifyDeployedBytecode(chain, address, contractName) {
+  const frozenBytecode = getFrozenDeployedBytecode(contractName);
+  if (!frozenBytecode) {
+    return { valid: false, error: "No frozen deployed bytecode found" };
+  }
+
+  try {
+    const onChainBytecode = execSync(
+      `cast code ${address} --rpc-url ${chain.rpc}`,
+      {
+        encoding: "utf8",
+        timeout: 15000,
+      },
+    ).trim();
+
+    if (onChainBytecode === "0x" || onChainBytecode === "") {
+      return { valid: false, error: "No bytecode found at address" };
+    }
+
+    if (onChainBytecode.toLowerCase() !== frozenBytecode.toLowerCase()) {
+      return {
+        valid: false,
+        error: "On-chain bytecode does not match frozen bytecode",
+        onChainLength: onChainBytecode.length,
+        frozenLength: frozenBytecode.length,
+      };
+    }
+
+    return { valid: true };
+  } catch (e) {
+    return { valid: false, error: e.message };
+  }
+}
+
 function getDeployerFromKey() {
   try {
     const cmd = `op read "${DEPLOYER_KEY_REF}" | xargs cast wallet address`;
@@ -600,79 +709,254 @@ function listDeployments() {
   log("");
 }
 
-function deploy(chainName, dryRun = false) {
+function runPreflightChecks(chainName, chain) {
+  log("");
+  log(`${colors.bold}Pre-flight Checks${colors.reset}`);
+  log("─".repeat(50));
+  log("");
+
+  let allPassed = true;
+
+  // 1. Check frozen bytecode exists and matches
+  info("Verifying frozen bytecode...");
+  for (const contractName of ["SpritzPayCore", "SpritzRouter"]) {
+    const result = verifyFrozenBytecode(contractName);
+    if (!result.valid) {
+      error(`${contractName}: ${result.error}`);
+      allPassed = false;
+    } else {
+      success(`${contractName} frozen bytecode verified`);
+    }
+  }
+
+  // 2. Check RPC health
+  log("");
+  info(`Testing RPC connection to ${chainName}...`);
+  const rpcResult = checkRpcHealth(chain, chainName);
+  if (!rpcResult.healthy) {
+    error(`RPC unreachable: ${rpcResult.error}`);
+    allPassed = false;
+  } else {
+    success(`RPC healthy (block ${rpcResult.blockNumber})`);
+  }
+
+  // 3. Compute expected addresses and check if already deployed
+  log("");
+  info("Computing deterministic addresses...");
+  const deployer = getDeployerFromSalt(CORE_SALT);
+  const coreAddress = computeCreate3Address(deployer, CORE_SALT);
+  const routerAddress = computeCreate3Address(deployer, ROUTER_SALT);
+
+  const coreChecksummed = execSync(`cast to-check-sum-address ${coreAddress}`, {
+    encoding: "utf8",
+  }).trim();
+  const routerChecksummed = execSync(
+    `cast to-check-sum-address ${routerAddress}`,
+    { encoding: "utf8" },
+  ).trim();
+
+  log(`  Core:   ${coreChecksummed}`);
+  log(`  Router: ${routerChecksummed}`);
+
+  // 4. Check if already deployed
+  log("");
+  info("Checking if contracts already deployed...");
+
+  const coreDeployed = checkAlreadyDeployed(chain, coreChecksummed);
+  const routerDeployed = checkAlreadyDeployed(chain, routerChecksummed);
+
+  if (coreDeployed && routerDeployed) {
+    warn("Both contracts already deployed on this chain");
+    return {
+      passed: true,
+      alreadyDeployed: true,
+      coreAddress: coreChecksummed,
+      routerAddress: routerChecksummed,
+    };
+  } else if (coreDeployed || routerDeployed) {
+    error("Partial deployment detected - manual intervention required");
+    log(`  Core deployed: ${coreDeployed}`);
+    log(`  Router deployed: ${routerDeployed}`);
+    allPassed = false;
+  } else {
+    success("Addresses available for deployment");
+  }
+
+  return {
+    passed: allPassed,
+    alreadyDeployed: false,
+    coreAddress: coreChecksummed,
+    routerAddress: routerChecksummed,
+  };
+}
+
+function showDeploymentPlan(chainName, chain, coreAddress, routerAddress) {
+  const deployer = getDeployerFromSalt(CORE_SALT);
+  const coreMetadata = getDeploymentMetadata("SpritzPayCore");
+  const routerMetadata = getDeploymentMetadata("SpritzRouter");
+
+  log("");
+  log(
+    `${colors.blue}═══════════════════════════════════════════════════════════${colors.reset}`,
+  );
+  log(`${colors.blue}  Deployment Plan${colors.reset}`);
+  log(
+    `${colors.blue}═══════════════════════════════════════════════════════════${colors.reset}`,
+  );
+  log("");
+  log(`  ${colors.bold}Chain:${colors.reset}       ${chainName} ${chain.testnet ? "(testnet)" : colors.yellow + "(MAINNET)" + colors.reset}`);
+  log(`  ${colors.bold}Chain ID:${colors.reset}    ${chain.chainId}`);
+  log(`  ${colors.bold}RPC:${colors.reset}         ${chain.rpc.slice(0, 50)}...`);
+  log(`  ${colors.bold}Explorer:${colors.reset}    ${chain.explorer}`);
+  log("");
+  log(`  ${colors.bold}Deployer:${colors.reset}    ${deployer}`);
+  log(`  ${colors.bold}Admin:${colors.reset}       ${chain.admin}`);
+  log("");
+  log(`  ${colors.bold}Contracts:${colors.reset}`);
+  log(`    SpritzPayCore  → ${coreAddress}`);
+  log(`      ${colors.dim}Initcode hash: ${coreMetadata?.initcodeHash?.slice(0, 22)}...${colors.reset}`);
+  log(`    SpritzRouter   → ${routerAddress}`);
+  log(`      ${colors.dim}Initcode hash: ${routerMetadata?.initcodeHash?.slice(0, 22)}...${colors.reset}`);
+  log("");
+  log(`  ${colors.bold}Salts:${colors.reset}`);
+  log(`    Core:   ${colors.dim}${CORE_SALT.slice(0, 22)}...${colors.reset}`);
+  log(`    Router: ${colors.dim}${ROUTER_SALT.slice(0, 22)}...${colors.reset}`);
+  log("");
+}
+
+function deploy(chainName, broadcast = false) {
   const chain = CHAINS[chainName];
 
   if (!chain) {
     error(`Unknown chain: ${chainName}`);
     log("");
     log(
-      `Run ${colors.dim}node scripts/deploy.js --list${colors.reset} to see available chains`,
+      `Run ${colors.dim}./deploy --list${colors.reset} to see available chains`,
     );
     process.exit(1);
   }
 
-  log("");
-  log(
-    `${colors.blue}═══════════════════════════════════════════════════════════${colors.reset}`,
-  );
-  log(
-    `${colors.blue}  Deploying to ${chainName}${dryRun ? " (DRY RUN)" : ""}${colors.reset}`,
-  );
-  log(
-    `${colors.blue}═══════════════════════════════════════════════════════════${colors.reset}`,
-  );
-  log("");
+  // Run pre-flight checks
+  const preflight = runPreflightChecks(chainName, chain);
 
-  // Get deployer address
-  let deployer;
-
-  if (dryRun) {
-    // For dry run, just get deployer from salt
-    deployer = getDeployerFromSalt(CORE_SALT);
-    info(`Using deployer from salt: ${deployer}`);
-  } else {
-    // For real deployment, verify 1Password key matches salt
-    if (!checkOpCli()) {
-      error("1Password CLI not installed");
-      log("");
-      log("  Install: https://developer.1password.com/docs/cli/get-started");
-      process.exit(1);
-    }
-    success("1Password CLI found");
-
-    if (!checkOpSignedIn()) {
-      error("Not signed in to 1Password");
-      log("");
-      log(`  Run: ${colors.dim}op signin${colors.reset}`);
-      process.exit(1);
-    }
-    success("1Password signed in");
-
-    const result = verifyDeployerAddress();
-    if (!result.valid) {
-      process.exit(1);
-    }
-    deployer = result.address;
-  }
-
-  // Show config
-  info(`RPC: ${chain.rpc}`);
-  info(`Admin: ${chain.admin}`);
-  if (chain.testnet) {
-    warn("This is a testnet deployment");
-  }
-  log("");
-
-  // Confirm for mainnet
-  if (!chain.testnet && !dryRun) {
-    log(`${colors.yellow}⚠️  MAINNET DEPLOYMENT${colors.reset}`);
+  if (!preflight.passed) {
     log("");
-    log("  Press Ctrl+C to cancel, or wait 5 seconds to continue...");
+    error("Pre-flight checks failed. Aborting deployment.");
+    process.exit(1);
+  }
+
+  // Show deployment plan
+  showDeploymentPlan(
+    chainName,
+    chain,
+    preflight.coreAddress,
+    preflight.routerAddress,
+  );
+
+  if (preflight.alreadyDeployed) {
+    log(
+      `${colors.green}Contracts already deployed at expected addresses.${colors.reset}`,
+    );
+    log("");
+    log(`To record this deployment: ${colors.dim}./deploy --record ${chainName}${colors.reset}`);
+    log("");
+    process.exit(0);
+  }
+
+  if (!broadcast) {
+    // Dry run - simulate deployment
+    log(`${colors.yellow}─── Simulation Mode ───${colors.reset}`);
+    log("");
+    info("Running deployment simulation...");
+    log("");
+
+    const env = {
+      ...process.env,
+      ADMIN_ADDRESS: chain.admin,
+      CORE_SALT: CORE_SALT,
+      ROUTER_SALT: ROUTER_SALT,
+    };
+
+    const result = spawnSync(
+      "forge",
+      [
+        "script",
+        "script/Deploy.s.sol:DeploySpritzForkTest",
+        "--rpc-url",
+        chain.rpc,
+      ],
+      {
+        stdio: "inherit",
+        env,
+        cwd: path.join(__dirname, ".."),
+      },
+    );
+
+    if (result.status !== 0) {
+      log("");
+      error("Simulation failed");
+      process.exit(1);
+    }
+
+    log("");
+    success("Simulation completed successfully");
+    log("");
+    log(`${colors.bold}To deploy for real:${colors.reset}`);
+    log(`  ${colors.dim}./deploy ${chainName} --broadcast${colors.reset}`);
+    log("");
+    process.exit(0);
+  }
+
+  // Real deployment - verify 1Password first
+  log(`${colors.red}─── LIVE DEPLOYMENT ───${colors.reset}`);
+  log("");
+
+  if (!checkOpCli()) {
+    error("1Password CLI not installed");
+    log("");
+    log("  Install: https://developer.1password.com/docs/cli/get-started");
+    process.exit(1);
+  }
+  success("1Password CLI found");
+
+  if (!checkOpSignedIn()) {
+    error("Not signed in to 1Password");
+    log("");
+    log(`  Run: ${colors.dim}op signin${colors.reset}`);
+    process.exit(1);
+  }
+  success("1Password signed in");
+
+  const verifyResult = verifyDeployerAddress();
+  if (!verifyResult.valid) {
+    process.exit(1);
+  }
+
+  // Final confirmation
+  log("");
+  if (!chain.testnet) {
+    log(
+      `${colors.red}${colors.bold}⚠️  WARNING: MAINNET DEPLOYMENT${colors.reset}`,
+    );
+    log("");
+    log("  This will deploy contracts to a production network.");
+    log("  This action cannot be undone.");
+    log("");
+    log("  Press Ctrl+C to cancel, or wait 10 seconds to continue...");
     log("");
 
     try {
-      execSync("sleep 5", { stdio: "inherit" });
+      execSync("sleep 10", { stdio: "inherit" });
+    } catch {
+      log("");
+      info("Cancelled");
+      process.exit(0);
+    }
+  } else {
+    log("  Press Ctrl+C to cancel, or wait 3 seconds to continue...");
+    log("");
+    try {
+      execSync("sleep 3", { stdio: "inherit" });
     } catch {
       log("");
       info("Cancelled");
@@ -680,18 +964,9 @@ function deploy(chainName, dryRun = false) {
     }
   }
 
-  // Build forge command
-  // Dry run uses ForkTest (simulates deployer via vm.prank)
-  // Real deploy uses DeploySpritz (requires private key)
-  const scriptPath = dryRun
-    ? "script/Deploy.s.sol:DeploySpritzForkTest"
-    : "script/Deploy.s.sol:DeploySpritz";
-
-  const forgeArgs = ["script", scriptPath, "--rpc-url", chain.rpc];
-
-  if (!dryRun) {
-    forgeArgs.push("--broadcast");
-  }
+  // Execute deployment
+  info("Broadcasting deployment transaction...");
+  log("");
 
   const env = {
     ...process.env,
@@ -700,27 +975,12 @@ function deploy(chainName, dryRun = false) {
     ROUTER_SALT: ROUTER_SALT,
   };
 
-  info("Running deployment...");
-  log("");
-
-  let result;
-  if (dryRun) {
-    // Dry run - no private key needed
-    result = spawnSync("forge", forgeArgs, {
-      stdio: "inherit",
-      env,
-      cwd: path.join(__dirname, ".."),
-    });
-  } else {
-    // Real deployment - read private key from 1Password and pass to forge
-    const forgeCmd = forgeArgs.join(" ");
-    const opCommand = `forge ${forgeCmd} --private-key $(op read "${DEPLOYER_KEY_REF}")`;
-    result = spawnSync("sh", ["-c", opCommand], {
-      stdio: "inherit",
-      env,
-      cwd: path.join(__dirname, ".."),
-    });
-  }
+  const forgeCmd = `forge script script/Deploy.s.sol:DeploySpritz --rpc-url ${chain.rpc} --broadcast --private-key $(op read "${DEPLOYER_KEY_REF}")`;
+  const result = spawnSync("sh", ["-c", forgeCmd], {
+    stdio: "inherit",
+    env,
+    cwd: path.join(__dirname, ".."),
+  });
 
   if (result.status !== 0) {
     log("");
@@ -729,21 +989,55 @@ function deploy(chainName, dryRun = false) {
   }
 
   log("");
-  success(`Deployment to ${chainName} ${dryRun ? "simulated" : "complete"}!`);
+  success("Deployment transaction broadcast!");
 
-  if (!dryRun) {
-    // Record deployment to metadata
-    log("");
-    recordDeployment(chainName);
+  // Verify deployed bytecode matches frozen bytecode
+  log("");
+  info("Verifying deployed bytecode matches frozen bytecode...");
 
-    log(`${colors.bold}Next steps:${colors.reset}`);
-    log(
-      `  1. Verify contracts: ${colors.dim}node scripts/deploy.js --verify ${chainName}${colors.reset}`,
-    );
-    log(`  2. Set up payment tokens: core.addPaymentToken(token, recipient)`);
-    log(`  3. Set swap module: router.setSwapModule(swapModule)`);
+  // Wait a moment for RPC to index
+  execSync("sleep 3");
+
+  const coreVerify = verifyDeployedBytecode(
+    chain,
+    preflight.coreAddress,
+    "SpritzPayCore",
+  );
+  if (!coreVerify.valid) {
+    error(`SpritzPayCore bytecode verification failed: ${coreVerify.error}`);
+  } else {
+    success("SpritzPayCore bytecode matches frozen bytecode");
   }
 
+  const routerVerify = verifyDeployedBytecode(
+    chain,
+    preflight.routerAddress,
+    "SpritzRouter",
+  );
+  if (!routerVerify.valid) {
+    error(`SpritzRouter bytecode verification failed: ${routerVerify.error}`);
+  } else {
+    success("SpritzRouter bytecode matches frozen bytecode");
+  }
+
+  // Record deployment
+  log("");
+  recordDeployment(chainName);
+
+  log(
+    `${colors.green}═══════════════════════════════════════════════════════════${colors.reset}`,
+  );
+  log(`${colors.green}  Deployment to ${chainName} complete!${colors.reset}`);
+  log(
+    `${colors.green}═══════════════════════════════════════════════════════════${colors.reset}`,
+  );
+  log("");
+  log(`${colors.bold}Next steps:${colors.reset}`);
+  log(
+    `  1. Verify on explorer: ${colors.dim}./deploy --verify <id> ${chainName}${colors.reset}`,
+  );
+  log(`  2. Set up payment tokens: core.addPaymentToken(token, recipient)`);
+  log(`  3. Set swap module: router.setSwapModule(swapModule)`);
   log("");
 }
 
@@ -753,46 +1047,39 @@ function printUsage() {
     `${colors.blue}Deploy Script${colors.reset} - Deploy Spritz contracts with 1Password`,
   );
   log("");
-  log("Usage:");
-  log(
-    `  node scripts/deploy.js <chain>                       Deploy to a chain`,
-  );
-  log(
-    `  node scripts/deploy.js <chain> --dry-run             Simulate without broadcasting`,
-  );
-  log(
-    `  node scripts/deploy.js --record <chain>              Record deployment to metadata`,
-  );
-  log(
-    `  node scripts/deploy.js --verify <id> <chain>         Verify deployment by ID`,
-  );
-  log(
-    `  node scripts/deploy.js --list                        List available chains`,
-  );
-  log(
-    `  node scripts/deploy.js --deployments                 List recorded deployments`,
-  );
-  log(
-    `  node scripts/deploy.js --check                       Verify 1Password deployer key`,
-  );
+  log(`${colors.bold}Commands:${colors.reset}`);
   log("");
-  log("Examples:");
-  log(`  ${colors.dim}node scripts/deploy.js base${colors.reset}`);
-  log(
-    `  ${colors.dim}node scripts/deploy.js ethereum --dry-run${colors.reset}`,
-  );
-  log(
-    `  ${colors.dim}node scripts/deploy.js --verify 86c101d4-e023-4f23-88f1-75d100573bfe base-sepolia${colors.reset}`,
-  );
-  log(`  ${colors.dim}node scripts/deploy.js --deployments${colors.reset}`);
+  log(`  ${colors.green}./deploy <chain>${colors.reset}`);
+  log(`      Run pre-flight checks and simulate deployment (safe, no tx)`);
   log("");
-  log("Setup:");
-  log(
-    `  1. Install 1Password CLI: https://developer.1password.com/docs/cli/get-started`,
-  );
-  log(`  2. Sign in: ${colors.dim}op signin${colors.reset}`);
-  log(`  3. Store your deployer private key in 1Password`);
-  log(`  4. Update DEPLOYER_KEY_REF in this script with the reference`);
+  log(`  ${colors.green}./deploy <chain> --broadcast${colors.reset}`);
+  log(`      Deploy contracts to the chain (requires 1Password)`);
+  log("");
+  log(`  ${colors.green}./deploy --list${colors.reset}`);
+  log(`      List all supported chains`);
+  log("");
+  log(`  ${colors.green}./deploy --deployments${colors.reset}`);
+  log(`      List all recorded deployments`);
+  log("");
+  log(`  ${colors.green}./deploy --record <chain>${colors.reset}`);
+  log(`      Record an existing deployment to metadata`);
+  log("");
+  log(`  ${colors.green}./deploy --verify <id> <chain>${colors.reset}`);
+  log(`      Verify contracts on block explorer`);
+  log("");
+  log(`  ${colors.green}./deploy --check${colors.reset}`);
+  log(`      Verify 1Password deployer key matches salt`);
+  log("");
+  log(`${colors.bold}Examples:${colors.reset}`);
+  log(`  ${colors.dim}./deploy base${colors.reset}                    # Simulate deployment to Base`);
+  log(`  ${colors.dim}./deploy base --broadcast${colors.reset}        # Deploy to Base for real`);
+  log(`  ${colors.dim}./deploy --verify abc123 base${colors.reset}    # Verify on Basescan`);
+  log("");
+  log(`${colors.bold}Workflow:${colors.reset}`);
+  log(`  1. Freeze contracts:  ${colors.dim}./freeze SpritzPayCore && ./freeze SpritzRouter${colors.reset}`);
+  log(`  2. Simulate:          ${colors.dim}./deploy <chain>${colors.reset}`);
+  log(`  3. Deploy:            ${colors.dim}./deploy <chain> --broadcast${colors.reset}`);
+  log(`  4. Verify:            ${colors.dim}./deploy --verify <id> <chain>${colors.reset}`);
   log("");
 }
 
@@ -840,7 +1127,7 @@ if (args[0] === "--record" || args[0] === "-r") {
   const chainName = args[1];
   if (!chainName) {
     error("Missing chain name");
-    log(`  Usage: node scripts/deploy.js --record <chain>`);
+    log(`  Usage: ./deploy --record <chain>`);
     process.exit(1);
   }
   const ok = recordDeployment(chainName);
@@ -852,7 +1139,7 @@ if (args[0] === "--verify" || args[0] === "-v") {
   const chainName = args[2];
   if (!deploymentId || !chainName) {
     error("Missing deployment ID or chain name");
-    log(`  Usage: node scripts/deploy.js --verify <deployment-id> <chain>`);
+    log(`  Usage: ./deploy --verify <deployment-id> <chain>`);
     log("");
     log("  Run --deployments to see available deployment IDs");
     process.exit(1);
@@ -861,7 +1148,14 @@ if (args[0] === "--verify" || args[0] === "-v") {
   process.exit(ok ? 0 : 1);
 }
 
+// Deployment command requires a chain name
 const chainName = args[0];
-const dryRun = args.includes("--dry-run") || args.includes("-n");
+if (chainName.startsWith("-")) {
+  error(`Unknown option: ${chainName}`);
+  printUsage();
+  process.exit(1);
+}
 
-deploy(chainName, dryRun);
+const broadcast = args.includes("--broadcast") || args.includes("-b");
+
+deploy(chainName, broadcast);
