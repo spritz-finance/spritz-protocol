@@ -1,0 +1,21 @@
+{
+  "name": "spritz-protocol",
+  "private": true,
+  "scripts": {
+    "deployment": "node scripts/deploy.js",
+    "freeze": "node scripts/freeze.js",
+    "safe": "node scripts/safe.js",
+    "salt": "node scripts/salt.js"
+  },
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  },
+  "dependencies": {
+    "@safe-global/api-kit": "^4.0.1",
+    "@safe-global/protocol-kit": "^6.1.2",
+    "ethers": "^6.16.0"
+  }
+}

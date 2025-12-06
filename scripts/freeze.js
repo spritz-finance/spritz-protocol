@@ -6,9 +6,9 @@
  * Uses official Forge tools (forge inspect) to extract bytecode reliably.
  *
  * Usage:
- *   node scripts/freeze.js <ContractName>        Freeze a contract for deployment
- *   node scripts/freeze.js --delete <Contract>   Delete a frozen build
- *   node scripts/freeze.js --list                List all frozen contracts
+ *   bun freeze <ContractName>                Freeze a contract for deployment
+ *   bun freeze --delete <Contract>           Delete a frozen build
+ *   bun freeze --list                        List all frozen contracts
  */
 
 const { execSync } = require("child_process");
@@ -188,7 +188,7 @@ function freezeContract(contractName) {
     log("");
     log(`  To re-freeze, first delete the existing build:`);
     log(
-      `  ${colors.dim}node scripts/freeze.js --delete ${contractName}${colors.reset}`
+      `  ${colors.dim}bun freeze --delete ${contractName}${colors.reset}`
     );
     log("");
     process.exit(1);
@@ -447,20 +447,20 @@ function printUsage() {
   log("");
   log(`Usage:`);
   log(
-    `  node scripts/freeze.js <ContractName>                Freeze a contract`
+    `  bun freeze <ContractName>                Freeze a contract`
   );
   log(
-    `  node scripts/freeze.js --delete <Contract>           Delete a frozen build`
+    `  bun freeze --delete <Contract>           Delete a frozen build`
   );
   log(
-    `  node scripts/freeze.js --delete <Contract> --force   Force delete (even with deployments)`
+    `  bun freeze --delete <Contract> --force   Force delete (even with deployments)`
   );
-  log(`  node scripts/freeze.js --list                        List frozen contracts`);
+  log(`  bun freeze --list                        List frozen contracts`);
   log("");
   log(`Examples:`);
-  log(`  ${colors.dim}node scripts/freeze.js SpritzPayCore${colors.reset}`);
+  log(`  ${colors.dim}bun freeze SpritzPayCore${colors.reset}`);
   log(
-    `  ${colors.dim}node scripts/freeze.js --delete SpritzPayCore${colors.reset}`
+    `  ${colors.dim}bun freeze --delete SpritzPayCore${colors.reset}`
   );
   log("");
 }
@@ -480,7 +480,7 @@ if (args[0] === "--list" || args[0] === "-l") {
 if (args[0] === "--delete" || args[0] === "-d") {
   if (!args[1]) {
     error("Missing contract name");
-    log(`  Usage: node scripts/freeze.js --delete <ContractName>`);
+    log(`  Usage: bun freeze --delete <ContractName>`);
     process.exit(1);
   }
   const force = args.includes("--force") || args.includes("-f");

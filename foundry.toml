@@ -27,13 +27,8 @@ remappings = [
     "solady/=lib/solady/src/"
 ]
 
-[rpc_endpoints]
-mainnet = "${MAINNET_RPC_URL}"
-sepolia = "${SEPOLIA_RPC_URL}"
-arbitrum = "${ARBITRUM_RPC_URL}"
-base = "${BASE_RPC_URL}"
-optimism = "${OPTIMISM_RPC_URL}"
-polygon = "${POLYGON_RPC_URL}"
+# RPC endpoints are configured in config.json (used by bun deployment/safe scripts)
+# The scripts pass full URLs directly to forge, so this section is not used.
 
 # Etherscan V2 API - same key works for all chains
 [etherscan]

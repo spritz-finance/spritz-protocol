@@ -12,4 +12,8 @@ broadcast/
 # Dotenv file
 .env
 
+# Node
+node_modules/
+bun.lockb
+
 .DS_Store
