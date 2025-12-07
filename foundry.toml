@@ -27,8 +27,9 @@ remappings = [
     "solady/=lib/solady/src/"
 ]
 
-# RPC endpoints are configured in config.json (used by bun deployment/safe scripts)
-# The scripts pass full URLs directly to forge, so this section is not used.
+# RPC endpoints for fork testing
+[rpc_endpoints]
+mainnet = "https://eth-mainnet.g.alchemy.com/v2/${RPC_KEY}"
 
 # Etherscan V2 API - same key works for all chains
 [etherscan]

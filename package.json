@@ -2,20 +2,23 @@
   "name": "spritz-protocol",
   "private": true,
   "scripts": {
-    "deployment": "node scripts/deploy.js",
-    "freeze": "node scripts/freeze.js",
-    "safe": "node scripts/safe.js",
-    "salt": "node scripts/salt.js"
+    "deployment": "bun run scripts/src/deployment.ts",
+    "freeze": "bun run scripts/src/freeze.ts",
+    "safe": "bun run scripts/src/safe.ts",
+    "salt": "bun run scripts/src/salt.ts",
+    "typecheck": "tsc --noEmit -p scripts/tsconfig.json"
   },
   "devDependencies": {
-    "@types/bun": "latest"
-  },
-  "peerDependencies": {
-    "typescript": "^5"
+    "@types/bun": "latest",
+    "bun-types": "^1.3.3",
+    "typescript": "^5.9.3",
+    "zod": "^4.1.13"
   },
   "dependencies": {
     "@safe-global/api-kit": "^4.0.1",
     "@safe-global/protocol-kit": "^6.1.2",
-    "ethers": "^6.16.0"
+    "@types/prompts": "^2.4.9",
+    "ethers": "^6.16.0",
+    "prompts": "^2.4.2"
   }
 }

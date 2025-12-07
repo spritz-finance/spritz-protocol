@@ -7,9 +7,14 @@
     "address": "0xbadfaceB351045374d7fd1d3915e62501BA9916C",
     "keyRef": "op://Personal/spritz-deployer/pk"
   },
-  "salts": {
-    "core": "0xbadfaceb351045374d7fd1d3915e62501ba9916c009a4573d5a53c4f001a7dda",
-    "router": "0xbadfaceb351045374d7fd1d3915e62501ba9916c009a4573d5a53c4f001a7ddb"
+  "contracts": {
+    "SpritzPayCore": {
+      "salt": "0xbadfaceb351045374d7fd1d3915e62501ba9916c009a4573d5a53c4f001a7dda"
+    },
+    "SpritzRouter": {
+      "salt": "0xbadfaceb351045374d7fd1d3915e62501ba9916c009a4573d5a53c4f001a7ddb",
+      "args": ["SpritzPayCore"]
+    }
   },
   "etherscan": {
     "apiKey": "${ETHERSCAN_API_KEY}"
@@ -73,8 +78,7 @@
     "monad": {
       "chainId": 143,
       "rpc": "https://monad-mainnet.g.alchemy.com/v2/${RPC_KEY}",
-      "explorer": "https://monadvision.com/",
-      "testnet": true
+      "explorer": "https://monadvision.com/"
     },
     "sepolia": {
       "chainId": 11155111,
