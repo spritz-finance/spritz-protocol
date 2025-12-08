@@ -9,6 +9,7 @@ import {ISwapModule} from "../src/interfaces/ISwapModule.sol";
 import {ERC20Mock} from "../src/test/ERC20Mock.sol";
 import {ERC20PermitMock} from "../src/test/ERC20PermitMock.sol";
 import {SwapModuleMock} from "../src/test/SwapModuleMock.sol";
+import {PermitHelper} from "./helpers/PermitHelper.sol";
 
 /// @title SpritzRouter Security Tests
 /// @notice Tests focused on exploit prevention when users have unlimited approval to the router
@@ -20,7 +21,7 @@ import {SwapModuleMock} from "../src/test/SwapModuleMock.sol";
 /// 3. SwapData exploitation - Can attacker craft malicious swapData to redirect funds?
 /// 4. OnBehalf functions - Can attacker abuse meta-transaction functions?
 /// 5. Reentrancy - Can attacker use callbacks to drain funds?
-contract SpritzRouterSecurityTest is Test {
+contract SpritzRouterSecurityTest is PermitHelper {
     SpritzRouter public router;
     SpritzPayCore public core;
     SwapModuleMock public swapModule;
@@ -185,78 +186,8 @@ contract SpritzRouterSecurityTest is Test {
         assertEq(permitToken.balanceOf(victim), VICTIM_BALANCE);
     }
 
-    /// @notice Attacker cannot use their own permit to pull victim's funds
-    /// @dev Permit is validated against the owner parameter
-    function test_Security_CannotUseOwnPermitForVictimFunds() public {
-        // Attacker signs a permit for themselves
-        ISpritzRouter.PermitData memory attackerPermit = _signPermit(
-            address(permitToken),
-            attacker,
-            attackerPrivateKey,
-            address(router),
-            1000e18,
-            block.timestamp + 1 hours
-        );
-
-        // Try to use attacker's permit but specify victim as owner
-        vm.prank(attacker);
-        vm.expectRevert(); // Signature doesn't match owner
-        router.payWithTokenOnBehalf(victim, address(permitToken), 1000e18, bytes32(0), attackerPermit);
-
-        assertEq(permitToken.balanceOf(victim), VICTIM_BALANCE);
-    }
-
-    /// @notice Attacker cannot replay a victim's permit
-    /// @dev Permits use nonces that increment after each use
-    function test_Security_CannotReplayPermit() public {
-        // Victim legitimately uses a permit
-        ISpritzRouter.PermitData memory permit = _signPermit(
-            address(permitToken),
-            victim,
-            victimPrivateKey,
-            address(router),
-            1000e18,
-            block.timestamp + 1 hours
-        );
-
-        // Victim uses the permit
-        vm.prank(victim);
-        router.payWithToken(address(permitToken), 1000e18, bytes32("first"), permit);
-
-        assertEq(permitToken.balanceOf(victim), VICTIM_BALANCE - 1000e18);
-
-        // Attacker tries to replay the same permit
-        vm.prank(attacker);
-        vm.expectRevert(); // Nonce already used
-        router.payWithTokenOnBehalf(victim, address(permitToken), 1000e18, bytes32("second"), permit);
-
-        // No additional funds taken
-        assertEq(permitToken.balanceOf(victim), VICTIM_BALANCE - 1000e18);
-    }
-
-    /// @notice Attacker cannot frontrun a permit to redirect funds
-    /// @dev Even if attacker frontruns the permit execution, funds go to the correct recipient
-    function test_Security_PermitFrontrunningDoesNotStealFunds() public {
-        // Victim creates and signs a permit
-        ISpritzRouter.PermitData memory permit = _signPermit(
-            address(permitToken),
-            victim,
-            victimPrivateKey,
-            address(router),
-            1000e18,
-            block.timestamp + 1 hours
-        );
-
-        // Attacker sees the permit in mempool and frontruns
-        // Even if attacker executes the permit, funds go to `recipient` (configured in core)
-        vm.prank(attacker);
-        router.payWithTokenOnBehalf(victim, address(permitToken), 1000e18, bytes32("frontrun"), permit);
-
-        // Funds went to the legitimate recipient, not the attacker
-        assertEq(permitToken.balanceOf(recipient), 1000e18);
-        assertEq(permitToken.balanceOf(attacker), 0);
-        assertEq(permitToken.balanceOf(victim), VICTIM_BALANCE - 1000e18);
-    }
+    // NOTE: Detailed EIP-2612 permit security tests (nonce replay, frontrunning, wrong owner/spender)
+    // are in SpritzRouterPermit2.t.sol::SpritzRouterEIP2612SecurityTest
 
     // ============ Attack Vector 4: Existing Approval + OnBehalf ============
     // Key scenario: Victim has approved router, attacker tries to use OnBehalf
@@ -398,30 +329,6 @@ contract SpritzRouterSecurityTest is Test {
         assertEq(sourceToken.balanceOf(victim), VICTIM_BALANCE);
     }
 
-    // ============ Helpers ============
-
-    function _signPermit(
-        address token,
-        address owner,
-        uint256 ownerPrivateKey,
-        address spender,
-        uint256 value,
-        uint256 deadline
-    ) internal view returns (ISpritzRouter.PermitData memory) {
-        bytes32 PERMIT_TYPEHASH =
-            keccak256("Permit(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline)");
-
-        bytes32 structHash = keccak256(
-            abi.encode(PERMIT_TYPEHASH, owner, spender, value, ERC20PermitMock(token).nonces(owner), deadline)
-        );
-
-        bytes32 DOMAIN_SEPARATOR = ERC20PermitMock(token).DOMAIN_SEPARATOR();
-        bytes32 digest = keccak256(abi.encodePacked("\x19\x01", DOMAIN_SEPARATOR, structHash));
-
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(ownerPrivateKey, digest);
-
-        return ISpritzRouter.PermitData({deadline: deadline, v: v, r: r, s: s});
-    }
 }
 
 /// @title Malicious Swap Module Test

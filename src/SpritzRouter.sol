@@ -32,11 +32,6 @@ contract SpritzRouter is ISpritzRouter, Ownable, ReentrancyGuard {
     /// @notice Thrown when attempting a swap without a configured swap module
     error SwapModuleNotSet();
 
-    /// @notice Thrown when swap output is less than expected for ExactOutput swaps
-    /// @param expected The minimum expected output amount
-    /// @param received The actual output amount received
-    error InsufficientOutput(uint256 expected, uint256 received);
-
     /// @notice The SpritzPayCore contract that processes payments
     /// @dev Immutable as core address is consistent across all chains via CREATE3
     ISpritzPayCore public immutable core;
@@ -327,12 +322,6 @@ contract SpritzRouter is ISpritzRouter, Ownable, ReentrancyGuard {
         ISwapModule.SwapResult memory result,
         bytes32 paymentReference
     ) internal {
-        if (swap.swapType == ISwapModule.SwapType.ExactOutput) {
-            if (result.outputAmountReceived < swap.paymentAmount) {
-                revert InsufficientOutput(swap.paymentAmount, result.outputAmountReceived);
-            }
-        }
-
         core.pay(
             payer,
             paymentToken,

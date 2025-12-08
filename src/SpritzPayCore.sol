@@ -5,27 +5,29 @@ import {Ownable} from "solady/auth/Ownable.sol";
 import {SafeTransferLib} from "solady/utils/SafeTransferLib.sol";
 import {EnumerableSetLib} from "solady/utils/EnumerableSetLib.sol";
 
-/**
- * @title SpritzPayCore
- * @dev Core payment infrastructure for Spritz Finance protocol.
- * Uses Solady for gas-efficient ownership and token transfers.
- */
+/// @title SpritzPayCore
+/// @notice Core payment processing contract for Spritz Finance protocol
+/// @dev Handles token allowlisting, recipient management, and payment event emission.
+///      Designed to be called by SpritzRouter or directly for simple payments.
+///      Uses Solady for gas-efficient ownership and token transfers.
 contract SpritzPayCore is Ownable {
     using EnumerableSetLib for EnumerableSetLib.AddressSet;
 
-    /**
-     * @notice Thrown when paying with unrecognized token
-     */
+    /// @notice Thrown when attempting to pay with a token that is not accepted
+    /// @param token The token address that was rejected
     error TokenNotAccepted(address token);
 
-    /**
-     * @notice Thrown when setting the zero address in a variable
-     */
+    /// @notice Thrown when a zero address is provided where not allowed
     error ZeroAddress();
 
-    /**
-     * @dev Emitted when a payment has been successfully sent
-     */
+    /// @notice Emitted when a payment is successfully processed
+    /// @param to The recipient address that received the payment
+    /// @param from The address that initiated the payment
+    /// @param sourceToken The original token the payer used (may differ from paymentToken if swapped)
+    /// @param sourceTokenAmount The amount of source token spent by the payer
+    /// @param paymentToken The token that was actually transferred to the recipient
+    /// @param paymentTokenAmount The amount of payment token received by the recipient
+    /// @param paymentReference Unique identifier linking to an off-chain payment record
     event Payment(
         address to,
         address indexed from,
@@ -36,34 +38,36 @@ contract SpritzPayCore is Ownable {
         bytes32 indexed paymentReference
     );
 
-    /// @notice List of all accepted payment tokens
+    /// @dev Set of all accepted payment token addresses
     EnumerableSetLib.AddressSet internal _acceptedPaymentTokens;
 
+    /// @notice Maps payment token addresses to their designated recipient addresses
     mapping(address => address) public tokenRecipients;
 
+    /// @dev Constructor is payable to save gas on deployment
     constructor() payable {}
 
-    /// @dev Prevents double-initialization (Solady pattern)
+    /// @dev Enables the initializer pattern for Solady Ownable
     function _guardInitializeOwner() internal pure override returns (bool) {
         return true;
     }
 
+    /// @notice Initializes the contract with an admin owner
+    /// @dev Can only be called once. Separate from constructor to support CREATE3 deployment.
+    /// @param admin Address that will own the contract and manage payment tokens
     function initialize(address admin) external {
         _initializeOwner(admin);
     }
 
-    /**
-     * @notice Core payment infrastructure - transfers tokens to payment recipient
-     * and emits event to be processed offchain.
-     * @dev requires that tokens be send to SpritzPayCore before calling the
-     * pay method.
-     * @param caller Address of the payment sender
-     * @param paymentToken Address of the target payment token
-     * @param paymentAmount Payment amount, denominated in target payment token
-     * @param sourceToken Address of the original source token used for payment, as a reference
-     * @param sourceTokenSpent The amount of the original source token
-     * @param paymentReference Arbitrary reference ID of the related payment
-     */
+    /// @notice Processes a payment by transferring tokens to the recipient and emitting an event
+    /// @dev Tokens must be transferred to this contract before calling pay().
+    ///      Typically called by SpritzRouter after handling approvals/swaps.
+    /// @param caller The original payer address (used for event emission)
+    /// @param paymentToken The token to transfer to the recipient (must be accepted)
+    /// @param paymentAmount Amount of paymentToken to transfer
+    /// @param sourceToken The token the payer originally used (for tracking, may equal paymentToken)
+    /// @param sourceTokenSpent Amount of sourceToken the payer spent
+    /// @param paymentReference Unique identifier for off-chain payment reconciliation
     function pay(
         address caller,
         address paymentToken,
@@ -76,8 +80,6 @@ contract SpritzPayCore is Ownable {
         if (_paymentRecipient == address(0))
             revert TokenNotAccepted(paymentToken);
 
-        SafeTransferLib.safeTransfer(paymentToken, _paymentRecipient, paymentAmount);
-
         emit Payment(
             _paymentRecipient,
             caller,
@@ -87,55 +89,68 @@ contract SpritzPayCore is Ownable {
             paymentAmount,
             paymentReference
         );
+
+        SafeTransferLib.safeTransfer(
+            paymentToken,
+            _paymentRecipient,
+            paymentAmount
+        );
     }
 
-    /**
-     * @dev Get all accepted payment tokens
-     * @return An array of the unique token addresses
-     */
+    // ============ View Functions ============
+
+    /// @notice Returns all accepted payment token addresses
+    /// @return Array of token addresses that can be used for payments
     function acceptedPaymentTokens() external view returns (address[] memory) {
         return _acceptedPaymentTokens.values();
     }
 
-    /**
-     * @dev Get all accepted payment tokens
-     * @return Whether this payment token is accepted
-     */
-    function isAcceptedToken(address tokenAddress) external view returns (bool) {
+    /// @notice Checks if a token is accepted for payments
+    /// @param tokenAddress The token address to check
+    /// @return True if the token is accepted, false otherwise
+    function isAcceptedToken(
+        address tokenAddress
+    ) external view returns (bool) {
         return _acceptedPaymentTokens.contains(tokenAddress);
     }
 
-    /**
-     * @dev Get the payment recipient for a token
-     * @return The address of the payment recipient
-     */
-    function paymentRecipient(address tokenAddress) external view returns (address) {
+    /// @notice Returns the recipient address for a payment token
+    /// @param tokenAddress The payment token address
+    /// @return The address that receives payments in this token (zero if not accepted)
+    function paymentRecipient(
+        address tokenAddress
+    ) external view returns (address) {
         return tokenRecipients[tokenAddress];
     }
 
-    /**
-     * @dev Adds an accepted payment token
-     */
-    function addPaymentToken(address token, address recipient) external onlyOwner {
+    // ============ Admin Functions ============
+
+    /// @notice Adds or updates an accepted payment token with its recipient
+    /// @dev Only callable by owner. Updates recipient if token already exists.
+    /// @param token The token address to accept
+    /// @param recipient The address that will receive payments in this token
+    function addPaymentToken(
+        address token,
+        address recipient
+    ) external onlyOwner {
         if (token == address(0)) revert ZeroAddress();
         if (recipient == address(0)) revert ZeroAddress();
         _acceptedPaymentTokens.add(token);
         tokenRecipients[token] = recipient;
     }
 
-    /**
-     * @dev Removes an accepted payment token
-     */
+    /// @notice Removes a payment token from the accepted list
+    /// @dev Only callable by owner. Payments with this token will revert after removal.
+    /// @param token The token address to remove
     function removePaymentToken(address token) external onlyOwner {
         _acceptedPaymentTokens.remove(token);
         delete tokenRecipients[token];
     }
 
-    /**
-     * @dev Withdraw deposited tokens to the given address
-     * @param token Token to withdraw
-     * @param to Target address
-     */
+    /// @notice Rescues tokens accidentally sent to this contract
+    /// @dev Only callable by owner. Transfers entire balance of specified token.
+    /// @param token The token to sweep
+    /// @param to The recipient address
     function sweep(address token, address to) external onlyOwner {
         uint256 balance = SafeTransferLib.balanceOf(token, address(this));
         if (balance > 0) {

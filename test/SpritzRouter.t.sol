@@ -10,64 +10,11 @@ import {Ownable} from "solady/auth/Ownable.sol";
 import {ERC20Mock} from "../src/test/ERC20Mock.sol";
 import {ERC20PermitMock} from "../src/test/ERC20PermitMock.sol";
 import {SwapModuleMock} from "../src/test/SwapModuleMock.sol";
+import {RouterTestSetup} from "./helpers/TestSetup.sol";
 
-contract SpritzRouterTest is Test {
-    SpritzRouter public router;
-    SpritzPayCore public core;
-    SwapModuleMock public swapModule;
-
-    ERC20Mock public paymentToken;
-    ERC20Mock public sourceToken;
-    ERC20PermitMock public permitToken;
-
-    address public admin;
-    address public payer;
-    address public recipient;
-
-    uint256 public payerPrivateKey;
-
-    event Payment(
-        address to,
-        address indexed from,
-        address indexed sourceToken,
-        uint256 sourceTokenAmount,
-        address paymentToken,
-        uint256 paymentTokenAmount,
-        bytes32 indexed paymentReference
-    );
-
+contract SpritzRouterTest is RouterTestSetup {
     function setUp() public {
-        admin = makeAddr("admin");
-        recipient = makeAddr("recipient");
-        (payer, payerPrivateKey) = makeAddrAndKey("payer");
-
-        core = new SpritzPayCore();
-        core.initialize(admin);
-
-        router = new SpritzRouter(address(core));
-        router.initialize(admin);
-
-        swapModule = new SwapModuleMock();
-
-        vm.prank(admin);
-        router.setSwapModule(address(swapModule));
-
-        paymentToken = new ERC20Mock();
-        sourceToken = new ERC20Mock();
-        permitToken = new ERC20PermitMock();
-
-        vm.prank(admin);
-        core.addPaymentToken(address(paymentToken), recipient);
-
-        vm.prank(admin);
-        core.addPaymentToken(address(permitToken), recipient);
-
-        vm.label(address(router), "Router");
-        vm.label(address(core), "Core");
-        vm.label(address(swapModule), "SwapModule");
-        vm.label(address(paymentToken), "PaymentToken");
-        vm.label(address(sourceToken), "SourceToken");
-        vm.label(address(permitToken), "PermitToken");
+        _setupRouterTest();
     }
 
     // ============ Initialization Tests ============
@@ -290,39 +237,9 @@ contract SpritzRouterTest is Test {
         router.payWithSwap(address(paymentToken), swapParams, bytes32(0));
     }
 
-    function test_RevertWhen_SwapInsufficientOutput() public {
-        uint256 sourceAmount = 1000e18;
-        uint256 paymentAmount = 500e18;
-        bytes32 paymentRef = keccak256("insufficient-output");
-
-        swapModule.setSwapRate(0.5e18);
-        swapModule.setOutputShortfall(100e18); // Return 100 less than expected
-
-        sourceToken.mint(payer, sourceAmount);
-
-        vm.prank(payer);
-        sourceToken.approve(address(router), sourceAmount);
-
-        ISpritzRouter.SwapPaymentParams memory swapParams = ISpritzRouter.SwapPaymentParams({
-            swapType: ISwapModule.SwapType.ExactOutput,
-            sourceToken: address(sourceToken),
-            sourceAmount: sourceAmount,
-            paymentAmount: paymentAmount,
-            deadline: block.timestamp + 1 hours,
-            swapData: ""
-        });
-
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                SpritzRouter.InsufficientOutput.selector,
-                paymentAmount,
-                paymentAmount - 100e18
-            )
-        );
-
-        vm.prank(payer);
-        router.payWithSwap(address(paymentToken), swapParams, paymentRef);
-    }
+    // NOTE: InsufficientOutput validation is now handled by swap modules (SwapModuleBase)
+    // See: test/OpenOceanModule.integration.t.sol and test/ParaSwapModule.integration.t.sol
+    // for revert tests: test_ExactInput_RevertWhen_SlippageExceeded, test_ExactOutput_RevertWhen_ExceedsMaxInput
 
     function test_RevertWhen_SwapModuleNotSet() public {
         SpritzRouter newRouter = new SpritzRouter(address(core));
@@ -409,6 +326,22 @@ contract SpritzRouterTest is Test {
         router.payWithNativeSwap{value: ethAmount}(address(paymentToken), swapParams, paymentRef);
 
         assertEq(paymentToken.balanceOf(recipient), paymentAmount);
+    }
+
+    function test_RevertWhen_NativeSwapRefundFails() public {
+        uint256 ethAmount = 1 ether;
+        uint256 paymentAmount = 1000e18;
+
+        swapModule.setSwapRate(2000e18);
+
+        NoReceiveContract noReceive = new NoReceiveContract{value: ethAmount}(
+            address(router),
+            address(paymentToken),
+            paymentAmount
+        );
+
+        vm.expectRevert("ETH refund failed");
+        noReceive.attemptPayment();
     }
 
     function test_RevertWhen_PermitAmountInsufficient() public {
@@ -814,38 +747,6 @@ contract SpritzRouterTest is Test {
         assertEq(permitToken.balanceOf(payer), 0);
     }
 
-    // ============ Helpers ============
-
-    function _signPermit(
-        address token,
-        address owner,
-        uint256 ownerPrivateKey,
-        address spender,
-        uint256 value,
-        uint256 deadline
-    ) internal view returns (ISpritzRouter.PermitData memory) {
-        bytes32 PERMIT_TYPEHASH = keccak256(
-            "Permit(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline)"
-        );
-
-        bytes32 structHash = keccak256(
-            abi.encode(
-                PERMIT_TYPEHASH,
-                owner,
-                spender,
-                value,
-                ERC20PermitMock(token).nonces(owner),
-                deadline
-            )
-        );
-
-        bytes32 DOMAIN_SEPARATOR = ERC20PermitMock(token).DOMAIN_SEPARATOR();
-        bytes32 digest = keccak256(abi.encodePacked("\x19\x01", DOMAIN_SEPARATOR, structHash));
-
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(ownerPrivateKey, digest);
-
-        return ISpritzRouter.PermitData({deadline: deadline, v: v, r: r, s: s});
-    }
 }
 
 contract SpritzRouterInvariantTest is Test {
@@ -925,4 +826,36 @@ contract SpritzRouterHandler is Test {
         vm.prank(payer);
         router.payWithToken(address(paymentToken), amount, bytes32(uint256(amount)));
     }
+}
+
+/// @dev Helper contract that cannot receive ETH - used to test refund failure scenarios
+contract NoReceiveContract {
+    SpritzRouter public router;
+    address public paymentToken;
+    uint256 public paymentAmount;
+
+    constructor(address _router, address _paymentToken, uint256 _paymentAmount) payable {
+        router = SpritzRouter(payable(_router));
+        paymentToken = _paymentToken;
+        paymentAmount = _paymentAmount;
+    }
+
+    function attemptPayment() external {
+        ISpritzRouter.SwapPaymentParams memory swapParams = ISpritzRouter.SwapPaymentParams({
+            swapType: ISwapModule.SwapType.ExactOutput,
+            sourceToken: address(0),
+            sourceAmount: address(this).balance,
+            paymentAmount: paymentAmount,
+            deadline: block.timestamp + 1 hours,
+            swapData: ""
+        });
+
+        router.payWithNativeSwap{value: address(this).balance}(
+            paymentToken,
+            swapParams,
+            keccak256("no-receive-test")
+        );
+    }
+
+    // Intentionally NO receive() or fallback() function
 }

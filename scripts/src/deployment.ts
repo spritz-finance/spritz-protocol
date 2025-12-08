@@ -28,6 +28,7 @@ import {
   getContractAddress,
   getContractDependencies,
   getDeploymentOrder,
+  hasChainSpecificArgs,
   resolveConstructorArgs,
 } from "./lib/createx";
 import { loadContractSaltOverrides, loadEnv, type Env } from "./lib/env";
@@ -245,7 +246,7 @@ function addDeploymentRecord(
   return true;
 }
 
-function showContractAddress(config: Config, contractName: string): void {
+function showContractAddress(config: Config, contractName: string, chainName?: string): void {
   const contractConfig = getContractConfig(config, contractName);
   if (!contractConfig) {
     error(`Contract not configured: ${contractName}`);
@@ -257,9 +258,45 @@ function showContractAddress(config: Config, contractName: string): void {
     process.exit(1);
   }
 
+  const isChainSpecific = hasChainSpecificArgs(config, contractName);
+
+  // If contract has chain-specific args but no chain provided, show info message
+  if (isChainSpecific && !chainName) {
+    log("");
+    log(`${colors.blue}${contractName}${colors.reset}`);
+    log("─".repeat(50));
+    log("");
+    log(`  ${colors.bold}Address:${colors.reset}  ${getContractAddress(config, contractName)}`);
+    log(
+      `  ${colors.bold}Salt:${colors.reset}     ${colors.dim}${contractConfig.salt.slice(0, 22)}...${colors.reset}`,
+    );
+    log(`  ${colors.bold}Deployer:${colors.reset} ${config.deployer.address}`);
+    log("");
+    log(`  ${colors.yellow}Note: This contract has chain-specific constructor args.${colors.reset}`);
+    log(`  ${colors.dim}Use: bun deployment --address ${contractName} <chain>${colors.reset}`);
+    log("");
+
+    // Show the raw args template
+    if (contractConfig.args) {
+      log(`  ${colors.bold}Constructor Args (template):${colors.reset}`);
+      for (const arg of contractConfig.args) {
+        log(`    ${colors.dim}${arg}${colors.reset}`);
+      }
+      log("");
+    }
+    return;
+  }
+
   const address = getContractAddress(config, contractName);
   const deps = getContractDependencies(config, contractName);
-  const args = resolveConstructorArgs(config, contractName);
+
+  // Try to resolve args - will fail gracefully for chain-specific without chain
+  let args: string[] = [];
+  try {
+    args = resolveConstructorArgs(config, contractName, chainName);
+  } catch {
+    // Will be handled by the isChainSpecific check above
+  }
 
   log("");
   log(`${colors.blue}${contractName}${colors.reset}`);
@@ -270,6 +307,10 @@ function showContractAddress(config: Config, contractName: string): void {
     `  ${colors.bold}Salt:${colors.reset}     ${colors.dim}${contractConfig.salt.slice(0, 22)}...${colors.reset}`,
   );
   log(`  ${colors.bold}Deployer:${colors.reset} ${config.deployer.address}`);
+
+  if (chainName) {
+    log(`  ${colors.bold}Chain:${colors.reset}    ${chainName}`);
+  }
 
   if (deps.length > 0) {
     log("");
@@ -436,7 +477,7 @@ function showDeploymentPlan(
 ): void {
   const contractConfig = getContractConfig(config, contractName)!;
   const metadata = getDeploymentMetadata(contractName);
-  const args = resolveConstructorArgs(config, contractName);
+  const args = resolveConstructorArgs(config, contractName, chainName);
 
   log("");
   log(
@@ -598,7 +639,7 @@ function deploy(
   info("Broadcasting deployment transaction...");
   log("");
 
-  const args = resolveConstructorArgs(config, contractName);
+  const args = resolveConstructorArgs(config, contractName, chainName);
   const constructorArgsEnv = args.length > 0 ? args.join(",") : "";
 
   const envVars = {
@@ -743,7 +784,7 @@ function verifyContract(
   }
 
   const address = getContractAddress(config, contractName)!;
-  const args = resolveConstructorArgs(config, contractName);
+  const args = resolveConstructorArgs(config, contractName, chainName);
   const etherscanApiKey = env.ETHERSCAN_API_KEY;
 
   log("");
@@ -874,12 +915,13 @@ function main(): void {
 
   if (args[0] === "--address" || args[0] === "-a") {
     const contractName = args[1];
+    const chainName = args[2]; // Optional for chain-specific contracts
     if (!contractName) {
       error("Missing contract name");
-      log(`  Usage: bun deployment --address <Contract>`);
+      log(`  Usage: bun deployment --address <Contract> [chain]`);
       process.exit(1);
     }
-    showContractAddress(config, contractName);
+    showContractAddress(config, contractName, chainName);
     process.exit(0);
   }
 

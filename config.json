@@ -14,6 +14,14 @@
     "SpritzRouter": {
       "salt": "0xbadfaceb351045374d7fd1d3915e62501ba9916c009a4573d5a53c4f001a7ddb",
       "args": ["SpritzPayCore"]
+    },
+    "OpenOceanModule": {
+      "salt": "0xbadfaceb351045374d7fd1d3915e62501ba9916c000000000000000000000001",
+      "args": ["${chain.openOcean}", "${chain.weth}"]
+    },
+    "ParaSwapModule": {
+      "salt": "0xbadfaceb351045374d7fd1d3915e62501ba9916c000000000000000000000002",
+      "args": ["${chain.paraSwapRegistry}", "${chain.weth}"]
     }
   },
   "etherscan": {
@@ -25,49 +33,84 @@
       "rpc": "https://eth-mainnet.g.alchemy.com/v2/${RPC_KEY}",
       "safeService": "https://safe-transaction-mainnet.safe.global",
       "explorer": "https://etherscan.io",
-      "etherscanApi": "https://api.etherscan.io/api"
+      "etherscanApi": "https://api.etherscan.io/api",
+      "addresses": {
+        "weth": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+        "openOcean": "0x6352a56caadC4F1E25CD6c75970Fa768A3304e64",
+        "paraSwapRegistry": "0xa68bEA62Dc4034A689AA0F58A76681433caCa663"
+      }
     },
     "base": {
       "chainId": 8453,
       "rpc": "https://base-mainnet.g.alchemy.com/v2/${RPC_KEY}",
       "safeService": "https://safe-transaction-base.safe.global",
       "explorer": "https://basescan.org",
-      "etherscanApi": "https://api.basescan.org/api"
+      "etherscanApi": "https://api.basescan.org/api",
+      "addresses": {
+        "weth": "0x4200000000000000000000000000000000000006",
+        "openOcean": "0x6352a56caadC4F1E25CD6c75970Fa768A3304e64",
+        "paraSwapRegistry": "0x7e31b336f9e8ba52ba3c4ac861b033ba90900bb3"
+      }
     },
     "arbitrum": {
       "chainId": 42161,
       "rpc": "https://arb-mainnet.g.alchemy.com/v2/${RPC_KEY}",
       "safeService": "https://safe-transaction-arbitrum.safe.global",
       "explorer": "https://arbiscan.io",
-      "etherscanApi": "https://api.arbiscan.io/api"
+      "etherscanApi": "https://api.arbiscan.io/api",
+      "addresses": {
+        "weth": "0x82aF49447D8a07e3bd95BD0d56f35241523fBab1",
+        "openOcean": "0x6352a56caadC4F1E25CD6c75970Fa768A3304e64",
+        "paraSwapRegistry": "0xdef171fe48cf0115b1d80b88dc8eab59176fee57"
+      }
     },
     "optimism": {
       "chainId": 10,
       "rpc": "https://opt-mainnet.g.alchemy.com/v2/${RPC_KEY}",
       "safeService": "https://safe-transaction-optimism.safe.global",
       "explorer": "https://optimistic.etherscan.io",
-      "etherscanApi": "https://api-optimistic.etherscan.io/api"
+      "etherscanApi": "https://api-optimistic.etherscan.io/api",
+      "addresses": {
+        "weth": "0x4200000000000000000000000000000000000006",
+        "openOcean": "0x6352a56caadC4F1E25CD6c75970Fa768A3304e64",
+        "paraSwapRegistry": "0xdef171fe48cf0115b1d80b88dc8eab59176fee57"
+      }
     },
     "polygon": {
       "chainId": 137,
       "rpc": "https://polygon-mainnet.g.alchemy.com/v2/${RPC_KEY}",
       "safeService": "https://safe-transaction-polygon.safe.global",
       "explorer": "https://polygonscan.com",
-      "etherscanApi": "https://api.polygonscan.com/api"
+      "etherscanApi": "https://api.polygonscan.com/api",
+      "addresses": {
+        "weth": "0x0d500B1d8E8eF31E21C99d1Db9A6444d3ADf1270",
+        "openOcean": "0x6352a56caadC4F1E25CD6c75970Fa768A3304e64",
+        "paraSwapRegistry": "0xdef171fe48cf0115b1d80b88dc8eab59176fee57"
+      }
     },
     "avalanche": {
       "chainId": 43114,
       "rpc": "https://avax-mainnet.g.alchemy.com/v2/${RPC_KEY}",
       "safeService": "https://safe-transaction-avalanche.safe.global",
       "explorer": "https://snowtrace.io",
-      "etherscanApi": "https://api.snowtrace.io/api"
+      "etherscanApi": "https://api.snowtrace.io/api",
+      "addresses": {
+        "weth": "0xB31f66AA3C1e785363F0875A1B74E27b85FD66c7",
+        "openOcean": "0x6352a56caadC4F1E25CD6c75970Fa768A3304e64",
+        "paraSwapRegistry": "0xdef171fe48cf0115b1d80b88dc8eab59176fee57"
+      }
     },
     "bsc": {
       "chainId": 56,
       "rpc": "https://bnb-mainnet.g.alchemy.com/v2/${RPC_KEY}",
       "safeService": "https://safe-transaction-bsc.safe.global",
       "explorer": "https://bscscan.com",
-      "etherscanApi": "https://api.bscscan.com/api"
+      "etherscanApi": "https://api.bscscan.com/api",
+      "addresses": {
+        "weth": "0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c",
+        "openOcean": "0x6352a56caadC4F1E25CD6c75970Fa768A3304e64",
+        "paraSwapRegistry": "0xdef171fe48cf0115b1d80b88dc8eab59176fee57"
+      }
     },
     "hyperevm": {
       "chainId": 999,
@@ -86,7 +129,10 @@
       "safeService": "https://safe-transaction-sepolia.safe.global",
       "explorer": "https://sepolia.etherscan.io",
       "etherscanApi": "https://api-sepolia.etherscan.io/api",
-      "testnet": true
+      "testnet": true,
+      "addresses": {
+        "weth": "0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14"
+      }
     },
     "base-sepolia": {
       "chainId": 84532,
@@ -94,7 +140,10 @@
       "safeService": "https://safe-transaction-base-sepolia.safe.global",
       "explorer": "https://sepolia.basescan.org",
       "etherscanApi": "https://api-sepolia.basescan.org/api",
-      "testnet": true
+      "testnet": true,
+      "addresses": {
+        "weth": "0x4200000000000000000000000000000000000006"
+      }
     }
   }
 }

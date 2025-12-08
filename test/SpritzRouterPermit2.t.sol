@@ -9,6 +9,7 @@ import {ISwapModule} from "../src/interfaces/ISwapModule.sol";
 import {ERC20Mock} from "../src/test/ERC20Mock.sol";
 import {ERC20PermitMock} from "../src/test/ERC20PermitMock.sol";
 import {SwapModuleMock} from "../src/test/SwapModuleMock.sol";
+import {PermitHelper} from "./helpers/PermitHelper.sol";
 
 /// @dev Permit2 interface for AllowanceTransfer
 interface IPermit2 {
@@ -526,7 +527,7 @@ contract SpritzRouterPermit2SecurityTest is Test {
 
 /// @title EIP-2612 Permit Security Tests
 /// @notice Comprehensive tests for EIP-2612 permit functionality
-contract SpritzRouterEIP2612SecurityTest is Test {
+contract SpritzRouterEIP2612SecurityTest is PermitHelper {
     SpritzRouter public router;
     SpritzPayCore public core;
 
@@ -565,13 +566,8 @@ contract SpritzRouterEIP2612SecurityTest is Test {
         uint256 amount = 1000e18;
 
         // Attacker signs a permit as themselves
-        ISpritzRouter.PermitData memory attackerPermit = _signPermit(
-            attacker,  // owner
-            attackerPrivateKey,
-            address(router),
-            amount,
-            block.timestamp + 1 hours
-        );
+        ISpritzRouter.PermitData memory attackerPermit =
+            _signPermit(address(permitToken), attacker, attackerPrivateKey, address(router), amount, block.timestamp + 1 hours);
 
         // Attacker tries to use it for victim
         vm.prank(attacker);
@@ -584,13 +580,8 @@ contract SpritzRouterEIP2612SecurityTest is Test {
         uint256 amount = 1000e18;
 
         // Victim signs permit for wrong spender
-        ISpritzRouter.PermitData memory permit = _signPermit(
-            victim,
-            victimPrivateKey,
-            attacker, // Wrong spender!
-            amount,
-            block.timestamp + 1 hours
-        );
+        ISpritzRouter.PermitData memory permit =
+            _signPermit(address(permitToken), victim, victimPrivateKey, attacker, amount, block.timestamp + 1 hours);
 
         vm.prank(victim);
         vm.expectRevert();
@@ -602,13 +593,8 @@ contract SpritzRouterEIP2612SecurityTest is Test {
         uint256 amount = 1000e18;
         uint256 deadline = block.timestamp + 1 hours;
 
-        ISpritzRouter.PermitData memory permit = _signPermit(
-            victim,
-            victimPrivateKey,
-            address(router),
-            amount,
-            deadline
-        );
+        ISpritzRouter.PermitData memory permit =
+            _signPermit(address(permitToken), victim, victimPrivateKey, address(router), amount, deadline);
 
         // Warp past deadline
         vm.warp(deadline + 1);
@@ -622,13 +608,8 @@ contract SpritzRouterEIP2612SecurityTest is Test {
     function test_Security_PermitNoncePreventsReplay() public {
         uint256 amount = 500e18;
 
-        ISpritzRouter.PermitData memory permit = _signPermit(
-            victim,
-            victimPrivateKey,
-            address(router),
-            amount,
-            block.timestamp + 1 hours
-        );
+        ISpritzRouter.PermitData memory permit =
+            _signPermit(address(permitToken), victim, victimPrivateKey, address(router), amount, block.timestamp + 1 hours);
 
         // First use succeeds
         vm.prank(victim);
@@ -649,13 +630,8 @@ contract SpritzRouterEIP2612SecurityTest is Test {
 
     /// @notice Permit with zero value is valid but does nothing
     function test_PermitZeroValueIsValid() public {
-        ISpritzRouter.PermitData memory permit = _signPermit(
-            victim,
-            victimPrivateKey,
-            address(router),
-            0,
-            block.timestamp + 1 hours
-        );
+        ISpritzRouter.PermitData memory permit =
+            _signPermit(address(permitToken), victim, victimPrivateKey, address(router), 0, block.timestamp + 1 hours);
 
         uint256 victimBalanceBefore = permitToken.balanceOf(victim);
 
@@ -670,13 +646,8 @@ contract SpritzRouterEIP2612SecurityTest is Test {
         actualAmount = bound(actualAmount, 1, 10_000e18);
 
         // Sign permit for the exact amount we'll use (not max)
-        // This avoids Permit2 fallback issues in the Solady permit2 function
         ISpritzRouter.PermitData memory permit = _signPermit(
-            victim,
-            victimPrivateKey,
-            address(router),
-            actualAmount,
-            block.timestamp + 1 hours
+            address(permitToken), victim, victimPrivateKey, address(router), actualAmount, block.timestamp + 1 hours
         );
 
         vm.prank(victim);
@@ -691,11 +662,7 @@ contract SpritzRouterEIP2612SecurityTest is Test {
 
         for (uint256 i = 0; i < 3; i++) {
             ISpritzRouter.PermitData memory permit = _signPermit(
-                victim,
-                victimPrivateKey,
-                address(router),
-                amount,
-                block.timestamp + 1 hours
+                address(permitToken), victim, victimPrivateKey, address(router), amount, block.timestamp + 1 hours
             );
 
             vm.prank(victim);
@@ -710,13 +677,8 @@ contract SpritzRouterEIP2612SecurityTest is Test {
     function test_Security_PermitFrontrunSafe() public {
         uint256 amount = 1000e18;
 
-        ISpritzRouter.PermitData memory permit = _signPermit(
-            victim,
-            victimPrivateKey,
-            address(router),
-            amount,
-            block.timestamp + 1 hours
-        );
+        ISpritzRouter.PermitData memory permit =
+            _signPermit(address(permitToken), victim, victimPrivateKey, address(router), amount, block.timestamp + 1 hours);
 
         // Attacker frontruns and executes the permit
         vm.prank(attacker);
@@ -725,27 +687,5 @@ contract SpritzRouterEIP2612SecurityTest is Test {
         // Funds went to recipient, not attacker
         assertEq(permitToken.balanceOf(recipient), amount);
         assertEq(permitToken.balanceOf(attacker), 0);
-    }
-
-    function _signPermit(
-        address owner,
-        uint256 ownerPrivateKey,
-        address spender,
-        uint256 value,
-        uint256 deadline
-    ) internal view returns (ISpritzRouter.PermitData memory) {
-        bytes32 PERMIT_TYPEHASH =
-            keccak256("Permit(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline)");
-
-        bytes32 structHash = keccak256(
-            abi.encode(PERMIT_TYPEHASH, owner, spender, value, permitToken.nonces(owner), deadline)
-        );
-
-        bytes32 DOMAIN_SEPARATOR = permitToken.DOMAIN_SEPARATOR();
-        bytes32 digest = keccak256(abi.encodePacked("\x19\x01", DOMAIN_SEPARATOR, structHash));
-
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(ownerPrivateKey, digest);
-
-        return ISpritzRouter.PermitData({deadline: deadline, v: v, r: r, s: s});
     }
 }
