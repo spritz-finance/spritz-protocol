@@ -1,0 +1,51 @@
+[profile.default]
+src = "src"
+out = "out"
+libs = ["lib"]
+
+# Compiler settings - LOCKED for reproducible builds
+solc = "0.8.30"
+evm_version = "cancun"
+optimizer = true
+optimizer_runs = 10_000_000
+via_ir = false
+auto_detect_solc = false
+
+# Disable metadata for deterministic bytecode across builds
+cbor_metadata = false
+bytecode_hash = "none"
+
+# Build info for verification
+build_info = true
+extra_output = ["storageLayout", "metadata"]
+
+# Allow reading deployment artifacts for scripts
+fs_permissions = [{ access = "read", path = "deployments" }]
+
+# FFI for API tests (disabled by default, enable with --ffi)
+ffi = false
+
+remappings = [
+    "@openzeppelin/=lib/openzeppelin-contracts/",
+    "solady/=lib/solady/src/"
+]
+
+# RPC endpoints for fork testing
+[rpc_endpoints]
+mainnet = "https://eth-mainnet.g.alchemy.com/v2/${RPC_KEY}"
+mainnet_local = "http://127.0.0.1:8545"
+base = "https://base-mainnet.g.alchemy.com/v2/${RPC_KEY}"
+base_local = "http://127.0.0.1:8546"
+
+# Etherscan V2 API - same key works for all chains
+[etherscan]
+mainnet = { key = "IFB6M2MYCIY6WKFH5VXQH1JDWGT4MXVDD6" }
+sepolia = { key = "IFB6M2MYCIY6WKFH5VXQH1JDWGT4MXVDD6" }
+arbitrum = { key = "IFB6M2MYCIY6WKFH5VXQH1JDWGT4MXVDD6" }
+base = { key = "IFB6M2MYCIY6WKFH5VXQH1JDWGT4MXVDD6" }
+optimism = { key = "IFB6M2MYCIY6WKFH5VXQH1JDWGT4MXVDD6" }
+polygon = { key = "IFB6M2MYCIY6WKFH5VXQH1JDWGT4MXVDD6" }
+avalanche = { key = "IFB6M2MYCIY6WKFH5VXQH1JDWGT4MXVDD6" }
+bsc = { key = "IFB6M2MYCIY6WKFH5VXQH1JDWGT4MXVDD6" }
+
+# See more config options https://github.com/foundry-rs/foundry/blob/master/crates/config/README.md#all-options

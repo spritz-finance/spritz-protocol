@@ -3,7 +3,7 @@ cache/
 out/
 
 # Dependencies (restored via `forge install` or `git submodule update --init --recursive`)
-lib/
+/lib/
 
 # Forge broadcast logs (we track deployments in deployments/*/metadata.json)
 broadcast/

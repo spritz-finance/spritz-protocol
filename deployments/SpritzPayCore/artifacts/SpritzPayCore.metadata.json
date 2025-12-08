@@ -1,0 +1,566 @@
+{
+  "compiler": {
+    "version": "0.8.30+commit.73712a01"
+  },
+  "language": "Solidity",
+  "output": {
+    "abi": [
+      {
+        "inputs": [],
+        "stateMutability": "payable",
+        "type": "constructor"
+      },
+      {
+        "inputs": [],
+        "type": "error",
+        "name": "AlreadyInitialized"
+      },
+      {
+        "inputs": [],
+        "type": "error",
+        "name": "NewOwnerIsZeroAddress"
+      },
+      {
+        "inputs": [],
+        "type": "error",
+        "name": "NoHandoverRequest"
+      },
+      {
+        "inputs": [
+          {
+            "internalType": "address",
+            "name": "token",
+            "type": "address"
+          }
+        ],
+        "type": "error",
+        "name": "TokenNotAccepted"
+      },
+      {
+        "inputs": [],
+        "type": "error",
+        "name": "Unauthorized"
+      },
+      {
+        "inputs": [],
+        "type": "error",
+        "name": "ZeroAddress"
+      },
+      {
+        "inputs": [
+          {
+            "internalType": "address",
+            "name": "pendingOwner",
+            "type": "address",
+            "indexed": true
+          }
+        ],
+        "type": "event",
+        "name": "OwnershipHandoverCanceled",
+        "anonymous": false
+      },
+      {
+        "inputs": [
+          {
+            "internalType": "address",
+            "name": "pendingOwner",
+            "type": "address",
+            "indexed": true
+          }
+        ],
+        "type": "event",
+        "name": "OwnershipHandoverRequested",
+        "anonymous": false
+      },
+      {
+        "inputs": [
+          {
+            "internalType": "address",
+            "name": "oldOwner",
+            "type": "address",
+            "indexed": true
+          },
+          {
+            "internalType": "address",
+            "name": "newOwner",
+            "type": "address",
+            "indexed": true
+          }
+        ],
+        "type": "event",
+        "name": "OwnershipTransferred",
+        "anonymous": false
+      },
+      {
+        "inputs": [
+          {
+            "internalType": "address",
+            "name": "to",
+            "type": "address",
+            "indexed": false
+          },
+          {
+            "internalType": "address",
+            "name": "from",
+            "type": "address",
+            "indexed": true
+          },
+          {
+            "internalType": "address",
+            "name": "sourceToken",
+            "type": "address",
+            "indexed": true
+          },
+          {
+            "internalType": "uint256",
+            "name": "sourceTokenAmount",
+            "type": "uint256",
+            "indexed": false
+          },
+          {
+            "internalType": "address",
+            "name": "paymentToken",
+            "type": "address",
+            "indexed": false
+          },
+          {
+            "internalType": "uint256",
+            "name": "paymentTokenAmount",
+            "type": "uint256",
+            "indexed": false
+          },
+          {
+            "internalType": "bytes32",
+            "name": "paymentReference",
+            "type": "bytes32",
+            "indexed": true
+          }
+        ],
+        "type": "event",
+        "name": "Payment",
+        "anonymous": false
+      },
+      {
+        "inputs": [],
+        "stateMutability": "view",
+        "type": "function",
+        "name": "acceptedPaymentTokens",
+        "outputs": [
+          {
+            "internalType": "address[]",
+            "name": "",
+            "type": "address[]"
+          }
+        ]
+      },
+      {
+        "inputs": [
+          {
+            "internalType": "address",
+            "name": "token",
+            "type": "address"
+          },
+          {
+            "internalType": "address",
+            "name": "recipient",
+            "type": "address"
+          }
+        ],
+        "stateMutability": "nonpayable",
+        "type": "function",
+        "name": "addPaymentToken"
+      },
+      {
+        "inputs": [],
+        "stateMutability": "payable",
+        "type": "function",
+        "name": "cancelOwnershipHandover"
+      },
+      {
+        "inputs": [
+          {
+            "internalType": "address",
+            "name": "pendingOwner",
+            "type": "address"
+          }
+        ],
+        "stateMutability": "payable",
+        "type": "function",
+        "name": "completeOwnershipHandover"
+      },
+      {
+        "inputs": [
+          {
+            "internalType": "address",
+            "name": "admin",
+            "type": "address"
+          }
+        ],
+        "stateMutability": "nonpayable",
+        "type": "function",
+        "name": "initialize"
+      },
+      {
+        "inputs": [
+          {
+            "internalType": "address",
+            "name": "tokenAddress",
+            "type": "address"
+          }
+        ],
+        "stateMutability": "view",
+        "type": "function",
+        "name": "isAcceptedToken",
+        "outputs": [
+          {
+            "internalType": "bool",
+            "name": "",
+            "type": "bool"
+          }
+        ]
+      },
+      {
+        "inputs": [],
+        "stateMutability": "view",
+        "type": "function",
+        "name": "owner",
+        "outputs": [
+          {
+            "internalType": "address",
+            "name": "result",
+            "type": "address"
+          }
+        ]
+      },
+      {
+        "inputs": [
+          {
+            "internalType": "address",
+            "name": "pendingOwner",
+            "type": "address"
+          }
+        ],
+        "stateMutability": "view",
+        "type": "function",
+        "name": "ownershipHandoverExpiresAt",
+        "outputs": [
+          {
+            "internalType": "uint256",
+            "name": "result",
+            "type": "uint256"
+          }
+        ]
+      },
+      {
+        "inputs": [
+          {
+            "internalType": "address",
+            "name": "caller",
+            "type": "address"
+          },
+          {
+            "internalType": "address",
+            "name": "paymentToken",
+            "type": "address"
+          },
+          {
+            "internalType": "uint256",
+            "name": "paymentAmount",
+            "type": "uint256"
+          },
+          {
+            "internalType": "address",
+            "name": "sourceToken",
+            "type": "address"
+          },
+          {
+            "internalType": "uint256",
+            "name": "sourceTokenSpent",
+            "type": "uint256"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "paymentReference",
+            "type": "bytes32"
+          }
+        ],
+        "stateMutability": "nonpayable",
+        "type": "function",
+        "name": "pay"
+      },
+      {
+        "inputs": [
+          {
+            "internalType": "address",
+            "name": "tokenAddress",
+            "type": "address"
+          }
+        ],
+        "stateMutability": "view",
+        "type": "function",
+        "name": "paymentRecipient",
+        "outputs": [
+          {
+            "internalType": "address",
+            "name": "",
+            "type": "address"
+          }
+        ]
+      },
+      {
+        "inputs": [
+          {
+            "internalType": "address",
+            "name": "token",
+            "type": "address"
+          }
+        ],
+        "stateMutability": "nonpayable",
+        "type": "function",
+        "name": "removePaymentToken"
+      },
+      {
+        "inputs": [],
+        "stateMutability": "payable",
+        "type": "function",
+        "name": "renounceOwnership"
+      },
+      {
+        "inputs": [],
+        "stateMutability": "payable",
+        "type": "function",
+        "name": "requestOwnershipHandover"
+      },
+      {
+        "inputs": [
+          {
+            "internalType": "address",
+            "name": "token",
+            "type": "address"
+          },
+          {
+            "internalType": "address",
+            "name": "to",
+            "type": "address"
+          }
+        ],
+        "stateMutability": "nonpayable",
+        "type": "function",
+        "name": "sweep"
+      },
+      {
+        "inputs": [
+          {
+            "internalType": "address",
+            "name": "",
+            "type": "address"
+          }
+        ],
+        "stateMutability": "view",
+        "type": "function",
+        "name": "tokenRecipients",
+        "outputs": [
+          {
+            "internalType": "address",
+            "name": "",
+            "type": "address"
+          }
+        ]
+      },
+      {
+        "inputs": [
+          {
+            "internalType": "address",
+            "name": "newOwner",
+            "type": "address"
+          }
+        ],
+        "stateMutability": "payable",
+        "type": "function",
+        "name": "transferOwnership"
+      }
+    ],
+    "devdoc": {
+      "kind": "dev",
+      "methods": {
+        "acceptedPaymentTokens()": {
+          "returns": {
+            "_0": "Array of token addresses that can be used for payments"
+          }
+        },
+        "addPaymentToken(address,address)": {
+          "details": "Only callable by owner. Updates recipient if token already exists.",
+          "params": {
+            "recipient": "The address that will receive payments in this token",
+            "token": "The token address to accept"
+          }
+        },
+        "cancelOwnershipHandover()": {
+          "details": "Cancels the two-step ownership handover to the caller, if any."
+        },
+        "completeOwnershipHandover(address)": {
+          "details": "Allows the owner to complete the two-step ownership handover to `pendingOwner`. Reverts if there is no existing ownership handover requested by `pendingOwner`."
+        },
+        "constructor": {
+          "details": "Constructor is payable to save gas on deployment"
+        },
+        "initialize(address)": {
+          "details": "Can only be called once. Separate from constructor to support CREATE3 deployment.",
+          "params": {
+            "admin": "Address that will own the contract and manage payment tokens"
+          }
+        },
+        "isAcceptedToken(address)": {
+          "params": {
+            "tokenAddress": "The token address to check"
+          },
+          "returns": {
+            "_0": "True if the token is accepted, false otherwise"
+          }
+        },
+        "owner()": {
+          "details": "Returns the owner of the contract."
+        },
+        "ownershipHandoverExpiresAt(address)": {
+          "details": "Returns the expiry timestamp for the two-step ownership handover to `pendingOwner`."
+        },
+        "pay(address,address,uint256,address,uint256,bytes32)": {
+          "details": "Tokens must be transferred to this contract before calling pay().      Typically called by SpritzRouter after handling approvals/swaps.",
+          "params": {
+            "caller": "The original payer address (used for event emission)",
+            "paymentAmount": "Amount of paymentToken to transfer",
+            "paymentReference": "Unique identifier for off-chain payment reconciliation",
+            "paymentToken": "The token to transfer to the recipient (must be accepted)",
+            "sourceToken": "The token the payer originally used (for tracking, may equal paymentToken)",
+            "sourceTokenSpent": "Amount of sourceToken the payer spent"
+          }
+        },
+        "paymentRecipient(address)": {
+          "params": {
+            "tokenAddress": "The payment token address"
+          },
+          "returns": {
+            "_0": "The address that receives payments in this token (zero if not accepted)"
+          }
+        },
+        "removePaymentToken(address)": {
+          "details": "Only callable by owner. Payments with this token will revert after removal.",
+          "params": {
+            "token": "The token address to remove"
+          }
+        },
+        "renounceOwnership()": {
+          "details": "Allows the owner to renounce their ownership."
+        },
+        "requestOwnershipHandover()": {
+          "details": "Request a two-step ownership handover to the caller. The request will automatically expire in 48 hours (172800 seconds) by default."
+        },
+        "sweep(address,address)": {
+          "details": "Only callable by owner. Transfers entire balance of specified token.",
+          "params": {
+            "to": "The recipient address",
+            "token": "The token to sweep"
+          }
+        },
+        "transferOwnership(address)": {
+          "details": "Allows the owner to transfer the ownership to `newOwner`."
+        }
+      },
+      "version": 1
+    },
+    "userdoc": {
+      "kind": "user",
+      "methods": {
+        "acceptedPaymentTokens()": {
+          "notice": "Returns all accepted payment token addresses"
+        },
+        "addPaymentToken(address,address)": {
+          "notice": "Adds or updates an accepted payment token with its recipient"
+        },
+        "initialize(address)": {
+          "notice": "Initializes the contract with an admin owner"
+        },
+        "isAcceptedToken(address)": {
+          "notice": "Checks if a token is accepted for payments"
+        },
+        "pay(address,address,uint256,address,uint256,bytes32)": {
+          "notice": "Processes a payment by transferring tokens to the recipient and emitting an event"
+        },
+        "paymentRecipient(address)": {
+          "notice": "Returns the recipient address for a payment token"
+        },
+        "removePaymentToken(address)": {
+          "notice": "Removes a payment token from the accepted list"
+        },
+        "sweep(address,address)": {
+          "notice": "Rescues tokens accidentally sent to this contract"
+        },
+        "tokenRecipients(address)": {
+          "notice": "Maps payment token addresses to their designated recipient addresses"
+        }
+      },
+      "version": 1
+    }
+  },
+  "settings": {
+    "remappings": [
+      "@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/",
+      "ds-test/=lib/permit2/lib/forge-std/lib/ds-test/src/",
+      "erc4626-tests/=lib/openzeppelin-contracts/lib/erc4626-tests/",
+      "forge-gas-snapshot/=lib/permit2/lib/forge-gas-snapshot/src/",
+      "forge-std/=lib/forge-std/src/",
+      "openzeppelin-contracts/=lib/openzeppelin-contracts/",
+      "permit2/=lib/permit2/",
+      "solady/=lib/solady/src/",
+      "solmate/=lib/permit2/lib/solmate/"
+    ],
+    "optimizer": {
+      "enabled": true,
+      "runs": 10000000
+    },
+    "metadata": {
+      "bytecodeHash": "none",
+      "appendCBOR": false
+    },
+    "compilationTarget": {
+      "src/SpritzPayCore.sol": "SpritzPayCore"
+    },
+    "evmVersion": "cancun",
+    "libraries": {}
+  },
+  "sources": {
+    "lib/solady/src/auth/Ownable.sol": {
+      "keccak256": "0xc208cdd9de02bbf4b5edad18b88e23a2be7ff56d2287d5649329dc7cda64b9a3",
+      "urls": [
+        "bzz-raw://e8fba079cc7230c617f7493a2e97873f88e59a53a5018fcb2e2b6ac42d8aa5a3",
+        "dweb:/ipfs/QmTXg8GSt8hsK2cZhbPFrund1mrwVdkLQmEPoQaFy4fhjs"
+      ],
+      "license": "MIT"
+    },
+    "lib/solady/src/utils/EnumerableSetLib.sol": {
+      "keccak256": "0xf36b8c76d8019ddae02fafd7746b7a4ff54a57b9034ec16314257871eae45556",
+      "urls": [
+        "bzz-raw://f4acdd31377376e7ec3ec3fda0abcccc5d235f425957c92f1481ebac52199117",
+        "dweb:/ipfs/QmbDNpv2kay65DcZTqrmGhkFGWd7aMb3LRXDVs151jHSNX"
+      ],
+      "license": "MIT"
+    },
+    "lib/solady/src/utils/SafeTransferLib.sol": {
+      "keccak256": "0xdbd1ee0cdf8476db0940c00b207c0e352cb8c60f769c8ea70db994e2c4980a1a",
+      "urls": [
+        "bzz-raw://d149fc856cf93e23458468083841b94e6372ea58b73c9377365c8d88501d83f5",
+        "dweb:/ipfs/QmQvhbjtxw8gEhfX7BnBmwvt3M6V9CfQmPW1okXYUKo3At"
+      ],
+      "license": "MIT"
+    },
+    "src/SpritzPayCore.sol": {
+      "keccak256": "0x66b6dbbdce7f3904386cdc24fde6f3f348f430af0fa82898ed8379be5b5d7c9b",
+      "urls": [
+        "bzz-raw://164568104d9eaf8bbdcad76d5fbf97ad0a2e33000a05e306bbb0f9d9f64c8948",
+        "dweb:/ipfs/QmYGY5wRQ2Tdvih6RQVx1ihTQxauphxcNJAXyu12kwN885"
+      ],
+      "license": "MIT"
+    }
+  },
+  "version": 1
+}

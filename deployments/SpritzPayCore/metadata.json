@@ -1,0 +1,17 @@
+{
+  "contract": "SpritzPayCore",
+  "frozenAt": "2025-12-08T14:33:00.285Z",
+  "gitCommit": "e41edaa13d956f80d0cfe3c467f541a69a34f1f3",
+  "gitBranch": "main",
+  "compiler": {
+    "solc": "0.8.30",
+    "evmVersion": "cancun",
+    "optimizer": true,
+    "optimizerRuns": 10000000,
+    "viaIR": false,
+    "cborMetadata": false,
+    "bytecodeHash": "none"
+  },
+  "initcodeHash": "0xe0fd4ad9342e6a7b09e434b7a78644b045d3086daa9fa3ced13ab42949435dc7",
+  "deployments": []
+}
