@@ -47,5 +47,6 @@ optimism = { key = "IFB6M2MYCIY6WKFH5VXQH1JDWGT4MXVDD6" }
 polygon = { key = "IFB6M2MYCIY6WKFH5VXQH1JDWGT4MXVDD6" }
 avalanche = { key = "IFB6M2MYCIY6WKFH5VXQH1JDWGT4MXVDD6" }
 bsc = { key = "IFB6M2MYCIY6WKFH5VXQH1JDWGT4MXVDD6" }
+hyperevm = { key = "IFB6M2MYCIY6WKFH5VXQH1JDWGT4MXVDD6", chain = 999, url = "https://api.hyperevmscan.io/api" }
 
 # See more config options https://github.com/foundry-rs/foundry/blob/master/crates/config/README.md#all-options

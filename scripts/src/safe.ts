@@ -4,7 +4,7 @@
  * Safe Admin CLI - Manage Spritz contracts via Safe multisig
  *
  * Commands:
- *   bun safe status <chain>                  Show current contract configuration
+ *   bun safe status [chain]                  Show contract configuration (all chains or specific)
  *   bun safe list <chain>                    List pending transactions
  *   bun safe sign <chain> <safeTxHash>       Sign a pending transaction
  *   bun safe execute <chain> <safeTxHash>    Execute a fully-signed transaction
@@ -14,6 +14,13 @@
  *   bun safe addPaymentToken <chain> <token> <recipient>   Add a payment token on Core
  *   bun safe removePaymentToken <chain> <token>            Remove a payment token from Core
  *   bun safe sweep <chain> <contract> <token> <to>         Sweep tokens from a contract
+ *
+ * Options:
+ *   --env, -e <environment>   Target environment: production (default) or sandbox
+ *
+ * Examples:
+ *   bun safe status --env sandbox
+ *   bun safe addPaymentToken base 0xUSDC... 0xRecipient... --env sandbox
  */
 
 import { execSync } from "child_process";
@@ -22,7 +29,14 @@ import { existsSync, readFileSync } from "fs";
 import { join } from "path";
 import prompts from "prompts";
 import { loadContractSaltOverrides, loadEnv, loadSigners, type SignerEnv } from "./lib/env";
-import { applyEnvOverrides, loadConfig, type Config } from "./lib/config";
+import {
+  applyEnvOverrides,
+  filterEnvArg,
+  loadConfig,
+  parseEnvironmentArg,
+  type Config,
+  type Environment,
+} from "./lib/config";
 import { buildChains, type Chain } from "./lib/chains";
 import { getContractAddress } from "./lib/createx";
 import { log, success, error, info, warn, colors } from "./lib/console";
@@ -31,12 +45,6 @@ const DEPLOYMENTS_DIR = join(process.cwd(), "deployments");
 
 const env = loadEnv();
 const saltOverrides = loadContractSaltOverrides();
-const baseConfig = loadConfig();
-const { config } = applyEnvOverrides(baseConfig, {
-  DEPLOYER_ADDRESS: env.DEPLOYER_ADDRESS,
-  DEPLOYER_KEY_REF: env.DEPLOYER_KEY_REF,
-  contractSalts: saltOverrides,
-});
 const SIGNERS = loadSigners();
 const SAFE_API_KEY = env.SAFE_API_KEY;
 
@@ -52,7 +60,19 @@ if (!SAFE_API_KEY) {
   log("");
 }
 
-const CHAINS = buildChains(config, env.RPC_KEY ?? "");
+function getConfig(environment: Environment): Config {
+  const baseConfig = loadConfig({ environment });
+  const { config } = applyEnvOverrides(baseConfig, {
+    DEPLOYER_ADDRESS: env.DEPLOYER_ADDRESS,
+    DEPLOYER_KEY_REF: env.DEPLOYER_KEY_REF,
+    contractSalts: saltOverrides,
+  });
+  return config;
+}
+
+function getChains(config: Config): Record<string, Chain> {
+  return buildChains(config, env.RPC_KEY ?? "");
+}
 
 const ROUTER_ABI = [
   "function setSwapModule(address newSwapModule) external",
@@ -140,7 +160,9 @@ interface DeploymentRecord {
   deployer: string;
   address: string;
   salt: string;
+  environment?: Environment;
   chains: string[];
+  constructorArgs?: string[];
 }
 
 interface Metadata {
@@ -153,7 +175,11 @@ interface ContractAddresses {
   router: { address: string; recorded: boolean };
 }
 
-function getDeploymentAddresses(chainName: string): ContractAddresses | null {
+function getDeploymentAddresses(
+  config: Config,
+  chainName: string,
+  environment: Environment
+): ContractAddresses | null {
   const coreMetadataPath = join(DEPLOYMENTS_DIR, "SpritzPayCore", "metadata.json");
   const routerMetadataPath = join(DEPLOYMENTS_DIR, "SpritzRouter", "metadata.json");
 
@@ -164,7 +190,9 @@ function getDeploymentAddresses(chainName: string): ContractAddresses | null {
 
   if (existsSync(coreMetadataPath)) {
     const coreMetadata: Metadata = JSON.parse(readFileSync(coreMetadataPath, "utf8"));
-    const coreDep = coreMetadata.deployments?.find((d) => d.chains.includes(chainName));
+    const coreDep = coreMetadata.deployments?.find(
+      (d) => d.chains.includes(chainName) && (d.environment ?? "production") === environment
+    );
     if (coreDep) {
       coreAddress = coreDep.address;
       coreRecorded = true;
@@ -173,7 +201,9 @@ function getDeploymentAddresses(chainName: string): ContractAddresses | null {
 
   if (existsSync(routerMetadataPath)) {
     const routerMetadata: Metadata = JSON.parse(readFileSync(routerMetadataPath, "utf8"));
-    const routerDep = routerMetadata.deployments?.find((d) => d.chains.includes(chainName));
+    const routerDep = routerMetadata.deployments?.find(
+      (d) => d.chains.includes(chainName) && (d.environment ?? "production") === environment
+    );
     if (routerDep) {
       routerAddress = routerDep.address;
       routerRecorded = true;
@@ -228,6 +258,7 @@ interface SafeContext {
 }
 
 interface InitSafeOptions {
+  config: Config;
   chainName: string;
   signerConfig?: SignerEnv;
   signerName?: string;
@@ -236,10 +267,11 @@ interface InitSafeOptions {
 async function initSafe(options: InitSafeOptions): Promise<SafeContext> {
   await loadSafeSDK();
 
-  const { chainName, signerName } = options;
+  const { config, chainName, signerName } = options;
   let { signerConfig } = options;
 
-  const chain = CHAINS[chainName];
+  const chains = getChains(config);
+  const chain = chains[chainName];
   if (!chain) {
     error(`Unknown chain: ${chainName}`);
     process.exit(1);
@@ -294,10 +326,14 @@ async function initSafe(options: InitSafeOptions): Promise<SafeContext> {
   return { protocolKit, apiKit, signer, chain, safeAddress: chain.admin, signerConfig };
 }
 
-async function initApiKit(chainName: string): Promise<{ apiKit: InstanceType<typeof SafeApiKit>; chain: Chain; safeAddress: string }> {
+async function initApiKit(
+  config: Config,
+  chainName: string
+): Promise<{ apiKit: InstanceType<typeof SafeApiKit>; chain: Chain; safeAddress: string }> {
   await loadSafeSDK();
 
-  const chain = CHAINS[chainName];
+  const chains = getChains(config);
+  const chain = chains[chainName];
   if (!chain) {
     error(`Unknown chain: ${chainName}`);
     process.exit(1);
@@ -311,8 +347,8 @@ async function initApiKit(chainName: string): Promise<{ apiKit: InstanceType<typ
   return { apiKit, chain, safeAddress: chain.admin };
 }
 
-async function listPendingTransactions(chainName: string): Promise<void> {
-  const { apiKit, safeAddress } = await initApiKit(chainName);
+async function listPendingTransactions(config: Config, chainName: string): Promise<void> {
+  const { apiKit, safeAddress } = await initApiKit(config, chainName);
 
   log("");
   log(`${colors.blue}Pending Transactions for ${chainName}${colors.reset}`);
@@ -351,11 +387,12 @@ interface TransactionData {
 }
 
 async function proposeTransaction(
+  config: Config,
   chainName: string,
   transactions: TransactionData[],
   description: string
 ): Promise<string> {
-  const { protocolKit, apiKit, signer, safeAddress } = await initSafe({ chainName });
+  const { protocolKit, apiKit, signer, safeAddress } = await initSafe({ config, chainName });
 
   log("");
   info(`Proposing transaction to Safe on ${chainName}...`);
@@ -399,8 +436,8 @@ async function proposeTransaction(
   return safeTxHash;
 }
 
-async function signTransaction(chainName: string, safeTxHash: string): Promise<void> {
-  const { apiKit, safeAddress } = await initApiKit(chainName);
+async function signTransaction(config: Config, chainName: string, safeTxHash: string): Promise<void> {
+  const { apiKit, safeAddress } = await initApiKit(config, chainName);
 
   log("");
   info(`Loading transaction ${safeTxHash.slice(0, 18)}...`);
@@ -433,7 +470,7 @@ async function signTransaction(chainName: string, safeTxHash: string): Promise<v
     log("");
     const shouldExecute = await confirmAction("Execute transaction now?");
     if (shouldExecute) {
-      await executeTransactionInternal(chainName, safeTxHash, tx);
+      await executeTransactionInternal(config, chainName, safeTxHash, tx);
     }
     return;
   }
@@ -448,7 +485,7 @@ async function signTransaction(chainName: string, safeTxHash: string): Promise<v
     process.exit(1);
   }
 
-  const { protocolKit } = await initSafe({ chainName, signerConfig });
+  const { protocolKit } = await initSafe({ config, chainName, signerConfig });
 
   log("");
   info(`Signing with ${signerConfig.name}...`);
@@ -471,7 +508,7 @@ async function signTransaction(chainName: string, safeTxHash: string): Promise<v
 
     const shouldExecute = await confirmAction("Execute transaction now?");
     if (shouldExecute) {
-      await executeTransactionInternal(chainName, safeTxHash, updatedTx);
+      await executeTransactionInternal(config, chainName, safeTxHash, updatedTx);
     }
   } else {
     log(`  ${colors.yellow}Waiting for more signatures${colors.reset}`);
@@ -480,6 +517,7 @@ async function signTransaction(chainName: string, safeTxHash: string): Promise<v
 }
 
 async function executeTransactionInternal(
+  config: Config,
   chainName: string,
   safeTxHash: string,
   tx: Awaited<ReturnType<InstanceType<typeof SafeApiKit>["getTransaction"]>>
@@ -490,7 +528,7 @@ async function executeTransactionInternal(
     process.exit(1);
   }
 
-  const { protocolKit, chain } = await initSafe({ chainName, signerConfig });
+  const { protocolKit, chain } = await initSafe({ config, chainName, signerConfig });
 
   log("");
   info(`Executing transaction...`);
@@ -507,8 +545,8 @@ async function executeTransactionInternal(
   log("");
 }
 
-async function executeTransaction(chainName: string, safeTxHash: string): Promise<void> {
-  const { apiKit } = await initApiKit(chainName);
+async function executeTransaction(config: Config, chainName: string, safeTxHash: string): Promise<void> {
+  const { apiKit } = await initApiKit(config, chainName);
 
   log("");
   info(`Loading transaction ${safeTxHash.slice(0, 18)}...`);
@@ -525,13 +563,18 @@ async function executeTransaction(chainName: string, safeTxHash: string): Promis
     process.exit(1);
   }
 
-  await executeTransactionInternal(chainName, safeTxHash, tx);
+  await executeTransactionInternal(config, chainName, safeTxHash, tx);
 }
 
-async function setSwapModule(chainName: string, moduleAddress: string): Promise<void> {
-  const addresses = getDeploymentAddresses(chainName);
+async function setSwapModule(
+  config: Config,
+  chainName: string,
+  environment: Environment,
+  moduleAddress: string
+): Promise<void> {
+  const addresses = getDeploymentAddresses(config, chainName, environment);
   if (!addresses) {
-    error(`No deployment found for ${chainName}`);
+    error(`No deployment found for ${chainName} (${environment})`);
     process.exit(1);
   }
 
@@ -546,13 +589,19 @@ async function setSwapModule(chainName: string, moduleAddress: string): Promise<
     },
   ];
 
-  await proposeTransaction(chainName, transactions, `Set swap module to ${moduleAddress}`);
+  await proposeTransaction(config, chainName, transactions, `Set swap module to ${moduleAddress}`);
 }
 
-async function addPaymentToken(chainName: string, token: string, recipient: string): Promise<void> {
-  const addresses = getDeploymentAddresses(chainName);
+async function addPaymentToken(
+  config: Config,
+  chainName: string,
+  environment: Environment,
+  token: string,
+  recipient: string
+): Promise<void> {
+  const addresses = getDeploymentAddresses(config, chainName, environment);
   if (!addresses) {
-    error(`No deployment found for ${chainName}`);
+    error(`No deployment found for ${chainName} (${environment})`);
     process.exit(1);
   }
 
@@ -567,13 +616,18 @@ async function addPaymentToken(chainName: string, token: string, recipient: stri
     },
   ];
 
-  await proposeTransaction(chainName, transactions, `Add payment token ${token} with recipient ${recipient}`);
+  await proposeTransaction(config, chainName, transactions, `Add payment token ${token} with recipient ${recipient}`);
 }
 
-async function removePaymentToken(chainName: string, token: string): Promise<void> {
-  const addresses = getDeploymentAddresses(chainName);
+async function removePaymentToken(
+  config: Config,
+  chainName: string,
+  environment: Environment,
+  token: string
+): Promise<void> {
+  const addresses = getDeploymentAddresses(config, chainName, environment);
   if (!addresses) {
-    error(`No deployment found for ${chainName}`);
+    error(`No deployment found for ${chainName} (${environment})`);
     process.exit(1);
   }
 
@@ -588,13 +642,20 @@ async function removePaymentToken(chainName: string, token: string): Promise<voi
     },
   ];
 
-  await proposeTransaction(chainName, transactions, `Remove payment token ${token}`);
+  await proposeTransaction(config, chainName, transactions, `Remove payment token ${token}`);
 }
 
-async function sweep(chainName: string, contract: string, token: string, to: string): Promise<void> {
-  const addresses = getDeploymentAddresses(chainName);
+async function sweep(
+  config: Config,
+  chainName: string,
+  environment: Environment,
+  contract: string,
+  token: string,
+  to: string
+): Promise<void> {
+  const addresses = getDeploymentAddresses(config, chainName, environment);
   if (!addresses) {
-    error(`No deployment found for ${chainName}`);
+    error(`No deployment found for ${chainName} (${environment})`);
     process.exit(1);
   }
 
@@ -612,7 +673,7 @@ async function sweep(chainName: string, contract: string, token: string, to: str
     },
   ];
 
-  await proposeTransaction(chainName, transactions, `Sweep ${token} from ${contract} to ${to}`);
+  await proposeTransaction(config, chainName, transactions, `Sweep ${token} from ${contract} to ${to}`);
 }
 
 interface ChainStatus {
@@ -629,11 +690,16 @@ interface ChainStatus {
   error?: string;
 }
 
-async function getChainStatus(chainName: string): Promise<ChainStatus | null> {
-  const chain = CHAINS[chainName];
+async function getChainStatus(
+  config: Config,
+  chainName: string,
+  environment: Environment
+): Promise<ChainStatus | null> {
+  const chains = getChains(config);
+  const chain = chains[chainName];
   if (!chain) return null;
 
-  const addresses = getDeploymentAddresses(chainName);
+  const addresses = getDeploymentAddresses(config, chainName, environment);
   if (!addresses) return null;
 
   const status: ChainStatus = {
@@ -679,8 +745,8 @@ async function getChainStatus(chainName: string): Promise<ChainStatus | null> {
   return status;
 }
 
-function getDeployedChains(): string[] {
-  const chains = new Set<string>();
+function getDeployedChains(environment: Environment): string[] {
+  const chainSet = new Set<string>();
 
   const coreMetadataPath = join(DEPLOYMENTS_DIR, "SpritzPayCore", "metadata.json");
   const routerMetadataPath = join(DEPLOYMENTS_DIR, "SpritzRouter", "metadata.json");
@@ -688,8 +754,10 @@ function getDeployedChains(): string[] {
   if (existsSync(coreMetadataPath)) {
     const metadata: Metadata = JSON.parse(readFileSync(coreMetadataPath, "utf8"));
     for (const dep of metadata.deployments || []) {
-      for (const chain of dep.chains) {
-        chains.add(chain);
+      if ((dep.environment ?? "production") === environment) {
+        for (const chain of dep.chains) {
+          chainSet.add(chain);
+        }
       }
     }
   }
@@ -697,39 +765,43 @@ function getDeployedChains(): string[] {
   if (existsSync(routerMetadataPath)) {
     const metadata: Metadata = JSON.parse(readFileSync(routerMetadataPath, "utf8"));
     for (const dep of metadata.deployments || []) {
-      for (const chain of dep.chains) {
-        chains.add(chain);
+      if ((dep.environment ?? "production") === environment) {
+        for (const chain of dep.chains) {
+          chainSet.add(chain);
+        }
       }
     }
   }
 
-  return Array.from(chains);
+  return Array.from(chainSet);
 }
 
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
 
-async function showAllStatus(): Promise<void> {
-  const deployedChains = getDeployedChains();
+async function showAllStatus(config: Config, environment: Environment): Promise<void> {
+  const deployedChains = getDeployedChains(environment);
+  const chains = getChains(config);
 
   if (deployedChains.length === 0) {
     log("");
-    warn("No deployments found.");
-    log("Deploy contracts first with: bun deployment deploy <chain>");
+    warn(`No ${environment} deployments found.`);
+    log(`Deploy contracts first with: bun deployment deploy <chain>${environment !== "production" ? ` --env ${environment}` : ""}`);
     log("");
     return;
   }
 
   log("");
-  log(`${colors.blue}Deployment Status Overview${colors.reset}`);
+  const envLabel = environment !== "production" ? ` (${environment})` : "";
+  log(`${colors.blue}Deployment Status Overview${envLabel}${colors.reset}`);
   log("═".repeat(90));
 
-  const mainnets = deployedChains.filter((c) => CHAINS[c] && !CHAINS[c].testnet);
-  const testnets = deployedChains.filter((c) => CHAINS[c] && CHAINS[c].testnet);
+  const mainnets = deployedChains.filter((c) => chains[c] && !chains[c].testnet);
+  const testnets = deployedChains.filter((c) => chains[c] && chains[c].testnet);
 
   const allChains = [...mainnets, ...testnets];
 
   for (const chainName of allChains) {
-    const status = await getChainStatus(chainName);
+    const status = await getChainStatus(config, chainName, environment);
     if (!status) continue;
 
     const chainLabel = status.testnet
@@ -776,25 +848,29 @@ async function showAllStatus(): Promise<void> {
   log("");
 }
 
-async function showStatus(chainName: string): Promise<void> {
-  const chain = CHAINS[chainName];
+async function showStatus(
+  config: Config,
+  chainName: string,
+  environment: Environment
+): Promise<void> {
+  const chains = getChains(config);
+  const chain = chains[chainName];
   if (!chain) {
     error(`Unknown chain: ${chainName}`);
     process.exit(1);
   }
 
-  const addresses = getDeploymentAddresses(chainName);
+  const addresses = getDeploymentAddresses(config, chainName, environment);
   if (!addresses) {
-    error(`No deployment found for ${chainName}`);
+    error(`No ${environment} deployment found for ${chainName}`);
     process.exit(1);
   }
 
   const provider = new ethers.JsonRpcProvider(chain.rpc);
-  const core = new ethers.Contract(addresses.core.address, CORE_ABI, provider);
-  const router = new ethers.Contract(addresses.router.address, ROUTER_ABI, provider);
 
   log("");
-  log(`${colors.blue}Contract Status on ${chainName}${colors.reset}`);
+  const envLabel = environment !== "production" ? ` (${environment})` : "";
+  log(`${colors.blue}Contract Status on ${chainName}${envLabel}${colors.reset}`);
   log("─".repeat(70));
   log("");
 
@@ -802,21 +878,27 @@ async function showStatus(chainName: string): Promise<void> {
     ? `${colors.green}deployed${colors.reset}`
     : `${colors.yellow}computed${colors.reset}`;
   log(`${colors.bold}SpritzPayCore${colors.reset} (${addresses.core.address}) [${coreStatus}]`);
-  const coreOwner = await core.owner();
-  log(`  Owner: ${coreOwner}`);
 
-  const tokens = await core.acceptedPaymentTokens();
-  log(`  Payment Tokens: ${tokens.length}`);
-  for (const token of tokens) {
-    const recipient = await core.paymentRecipient(token);
-    let symbol = "";
-    try {
-      const erc20 = new ethers.Contract(token, ERC20_ABI, provider);
-      symbol = await erc20.symbol();
-    } catch {
-      symbol = "???";
+  if (addresses.core.recorded) {
+    const core = new ethers.Contract(addresses.core.address, CORE_ABI, provider);
+    const coreOwner = await core.owner();
+    log(`  Owner: ${coreOwner}`);
+
+    const tokens = await core.acceptedPaymentTokens();
+    log(`  Payment Tokens: ${tokens.length}`);
+    for (const token of tokens) {
+      const recipient = await core.paymentRecipient(token);
+      let symbol = "";
+      try {
+        const erc20 = new ethers.Contract(token, ERC20_ABI, provider);
+        symbol = await erc20.symbol();
+      } catch {
+        symbol = "???";
+      }
+      log(`    ${colors.dim}${token} (${symbol}) → ${recipient}${colors.reset}`);
     }
-    log(`    ${colors.dim}${token} (${symbol}) → ${recipient}${colors.reset}`);
+  } else {
+    log(`  ${colors.dim}Not deployed yet${colors.reset}`);
   }
 
   log("");
@@ -824,10 +906,16 @@ async function showStatus(chainName: string): Promise<void> {
     ? `${colors.green}deployed${colors.reset}`
     : `${colors.yellow}computed${colors.reset}`;
   log(`${colors.bold}SpritzRouter${colors.reset} (${addresses.router.address}) [${routerStatus}]`);
-  const routerOwner = await router.owner();
-  const swapModule = await router.swapModule();
-  log(`  Owner: ${routerOwner}`);
-  log(`  Swap Module: ${swapModule}`);
+
+  if (addresses.router.recorded) {
+    const router = new ethers.Contract(addresses.router.address, ROUTER_ABI, provider);
+    const routerOwner = await router.owner();
+    const swapModule = await router.swapModule();
+    log(`  Owner: ${routerOwner}`);
+    log(`  Swap Module: ${swapModule}`);
+  } else {
+    log(`  ${colors.dim}Not deployed yet${colors.reset}`);
+  }
 
   log("");
 }
@@ -867,11 +955,17 @@ function printUsage(): void {
   log(`  ${colors.green}bun safe sweep <chain> <core|router> <token> <to>${colors.reset}`);
   log(`      Sweep tokens from a contract`);
   log("");
+  log(`${colors.bold}Options:${colors.reset}`);
+  log(`  ${colors.green}--env, -e <environment>${colors.reset}`);
+  log(`      Target environment: production (default) or sandbox`);
+  log("");
   log(`${colors.bold}Examples:${colors.reset}`);
   log(`  ${colors.dim}bun safe status${colors.reset}`);
   log(`  ${colors.dim}bun safe status base${colors.reset}`);
+  log(`  ${colors.dim}bun safe status --env sandbox${colors.reset}`);
+  log(`  ${colors.dim}bun safe status base --env sandbox${colors.reset}`);
   log(`  ${colors.dim}bun safe setSwapModule base 0x1234...${colors.reset}`);
-  log(`  ${colors.dim}bun safe addPaymentToken base 0xUSDC... 0xRecipient...${colors.reset}`);
+  log(`  ${colors.dim}bun safe addPaymentToken base 0xUSDC... 0xRecipient... --env sandbox${colors.reset}`);
   log(`  ${colors.dim}bun safe list base${colors.reset}`);
   log(`  ${colors.dim}bun safe sign base 0xsafeTxHash...${colors.reset}`);
   log(`  ${colors.dim}bun safe execute base 0xsafeTxHash...${colors.reset}`);
@@ -883,12 +977,16 @@ function printUsage(): void {
 }
 
 async function main(): Promise<void> {
-  const args = process.argv.slice(2);
+  const rawArgs = process.argv.slice(2);
 
-  if (args.length === 0 || args[0] === "--help" || args[0] === "-h") {
+  if (rawArgs.length === 0 || rawArgs[0] === "--help" || rawArgs[0] === "-h") {
     printUsage();
     process.exit(0);
   }
+
+  const environment = parseEnvironmentArg(rawArgs);
+  const args = filterEnvArg(rawArgs);
+  const config = getConfig(environment);
 
   const command = args[0];
 
@@ -896,9 +994,9 @@ async function main(): Promise<void> {
     switch (command) {
       case "status":
         if (args[1]) {
-          await showStatus(args[1]);
+          await showStatus(config, args[1], environment);
         } else {
-          await showAllStatus();
+          await showAllStatus(config, environment);
         }
         break;
 
@@ -907,7 +1005,7 @@ async function main(): Promise<void> {
           error("Missing chain name");
           process.exit(1);
         }
-        await listPendingTransactions(args[1]);
+        await listPendingTransactions(config, args[1]);
         break;
 
       case "sign":
@@ -915,7 +1013,7 @@ async function main(): Promise<void> {
           error("Usage: bun safe sign <chain> <safeTxHash>");
           process.exit(1);
         }
-        await signTransaction(args[1], args[2]);
+        await signTransaction(config, args[1], args[2]);
         break;
 
       case "execute":
@@ -923,7 +1021,7 @@ async function main(): Promise<void> {
           error("Usage: bun safe execute <chain> <safeTxHash>");
           process.exit(1);
         }
-        await executeTransaction(args[1], args[2]);
+        await executeTransaction(config, args[1], args[2]);
         break;
 
       case "setSwapModule":
@@ -931,7 +1029,7 @@ async function main(): Promise<void> {
           error("Usage: bun safe setSwapModule <chain> <moduleAddress>");
           process.exit(1);
         }
-        await setSwapModule(args[1], args[2]);
+        await setSwapModule(config, args[1], environment, args[2]);
         break;
 
       case "addPaymentToken":
@@ -939,7 +1037,7 @@ async function main(): Promise<void> {
           error("Usage: bun safe addPaymentToken <chain> <token> <recipient>");
           process.exit(1);
         }
-        await addPaymentToken(args[1], args[2], args[3]);
+        await addPaymentToken(config, args[1], environment, args[2], args[3]);
         break;
 
       case "removePaymentToken":
@@ -947,7 +1045,7 @@ async function main(): Promise<void> {
           error("Usage: bun safe removePaymentToken <chain> <token>");
           process.exit(1);
         }
-        await removePaymentToken(args[1], args[2]);
+        await removePaymentToken(config, args[1], environment, args[2]);
         break;
 
       case "sweep":
@@ -959,7 +1057,7 @@ async function main(): Promise<void> {
           error("Contract must be 'core' or 'router'");
           process.exit(1);
         }
-        await sweep(args[1], args[2], args[3], args[4]);
+        await sweep(config, args[1], environment, args[2], args[3], args[4]);
         break;
 
       default:

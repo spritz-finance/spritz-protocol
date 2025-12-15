@@ -44,7 +44,6 @@ contract SpritzPayCore is Ownable {
     /// @notice Maps payment token addresses to their designated recipient addresses
     mapping(address => address) public tokenRecipients;
 
-    /// @dev Constructor is payable to save gas on deployment
     constructor() payable {}
 
     /// @dev Enables the initializer pattern for Solady Ownable

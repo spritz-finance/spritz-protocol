@@ -23,6 +23,10 @@ const ContractConfigSchema = z.object({
   args: z.array(z.string()).optional(),
 });
 
+const EnvironmentConfigSchema = z.object({
+  contracts: z.record(z.string(), ContractConfigSchema.partial()),
+});
+
 export const ConfigSchema = z.object({
   admin: z.object({
     safe: AddressSchema,
@@ -33,6 +37,7 @@ export const ConfigSchema = z.object({
     keyRef: OpRefSchema,
   }),
   contracts: z.record(z.string(), ContractConfigSchema),
+  environments: z.record(z.string(), EnvironmentConfigSchema).optional(),
   etherscan: z
     .object({
       apiKey: z.string(),
@@ -41,12 +46,20 @@ export const ConfigSchema = z.object({
   chains: z.record(z.string(), ChainConfigSchema),
 });
 
+export type Environment = "production" | "sandbox";
+
 export type Config = z.infer<typeof ConfigSchema>;
 export type ChainConfig = z.infer<typeof ChainConfigSchema>;
 export type ContractConfig = z.infer<typeof ContractConfigSchema>;
 
-export function loadConfig(configPath?: string): Config {
-  const resolvedPath = configPath ?? join(process.cwd(), "config.json");
+export interface LoadConfigOptions {
+  configPath?: string;
+  environment?: Environment;
+}
+
+export function loadConfig(options?: LoadConfigOptions): Config {
+  const resolvedPath = options?.configPath ?? join(process.cwd(), "config.json");
+  const environment = options?.environment ?? "production";
 
   if (!existsSync(resolvedPath)) {
     throw new Error(`config.json not found at ${resolvedPath}. Run from project root.`);
@@ -54,13 +67,38 @@ export function loadConfig(configPath?: string): Config {
 
   const content = readFileSync(resolvedPath, "utf8");
   const raw = JSON.parse(content);
+  const config = ConfigSchema.parse(raw);
 
-  return ConfigSchema.parse(raw);
+  // For production, use contracts as-is
+  if (environment === "production") {
+    return config;
+  }
+
+  // For other environments, merge environment-specific contract overrides
+  const envConfig = config.environments?.[environment];
+  if (!envConfig) {
+    throw new Error(`Environment "${environment}" not found in config.json`);
+  }
+
+  const mergedContracts = { ...config.contracts };
+  for (const [name, overrides] of Object.entries(envConfig.contracts)) {
+    if (mergedContracts[name]) {
+      mergedContracts[name] = {
+        ...mergedContracts[name],
+        ...overrides,
+      };
+    }
+  }
+
+  return {
+    ...config,
+    contracts: mergedContracts,
+  };
 }
 
-export function loadConfigSafe(configPath?: string): Config | null {
+export function loadConfigSafe(options?: LoadConfigOptions): Config | null {
   try {
-    return loadConfig(configPath);
+    return loadConfig(options);
   } catch {
     return null;
   }
@@ -68,6 +106,32 @@ export function loadConfigSafe(configPath?: string): Config | null {
 
 export function getContractConfig(config: Config, contractName: string): ContractConfig | null {
   return config.contracts[contractName] ?? null;
+}
+
+export function parseEnvironmentArg(args: string[]): Environment {
+  const envIndex = args.findIndex((a) => a === "--env" || a === "-e");
+  if (envIndex === -1 || envIndex === args.length - 1) {
+    return "production";
+  }
+  const envValue = args[envIndex + 1];
+  if (envValue !== "production" && envValue !== "sandbox") {
+    throw new Error(`Invalid environment: ${envValue}. Must be "production" or "sandbox"`);
+  }
+  return envValue;
+}
+
+export function filterEnvArg(args: string[]): string[] {
+  const result: string[] = [];
+  let i = 0;
+  while (i < args.length) {
+    if (args[i] === "--env" || args[i] === "-e") {
+      i += 2; // Skip --env and its value
+    } else {
+      result.push(args[i]);
+      i++;
+    }
+  }
+  return result;
 }
 
 export function getContractNames(config: Config): string[] {

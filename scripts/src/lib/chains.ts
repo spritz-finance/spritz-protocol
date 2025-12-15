@@ -17,7 +17,7 @@ export interface Chain {
 
 export function buildChains(
   config: Config,
-  rpcKey: string
+  rpcKey: string,
 ): Record<string, Chain> {
   const chains: Record<string, Chain> = {};
 
@@ -40,7 +40,7 @@ export function buildChains(
 
 export function getChain(
   chains: Record<string, Chain>,
-  name: string
+  name: string,
 ): Chain | null {
   return chains[name] ?? null;
 }

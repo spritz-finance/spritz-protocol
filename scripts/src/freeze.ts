@@ -153,7 +153,9 @@ interface DeploymentRecord {
   deployer: string;
   address: string;
   salt: string;
+  environment?: string;
   chains: string[];
+  constructorArgs?: string[];
 }
 
 interface Metadata {
@@ -235,18 +237,23 @@ function freezeContract(contractName: string): void {
   const artifactJson = forgeInspect(contractName, "metadata");
   writeFileSync(join(artifactsDir, `${contractName}.metadata.json`), artifactJson);
 
-  success("Bytecode extracted via forge inspect");
+  const abi = forgeInspect(contractName, "abi");
+  writeFileSync(join(artifactsDir, `${contractName}.abi.json`), abi);
+
+  success("Bytecode and ABI extracted via forge inspect");
 
   info("Generating verification JSON...");
   const verifyOutput = run(
-    `forge verify-contract --show-standard-json-input 0x0000000000000000000000000000000000000000 ${contractName}`,
+    `forge verify-contract --show-standard-json-input --root . 0x0000000000000000000000000000000000000000 ${contractName}`,
     { silent: true, encoding: "utf8" }
   );
-  if (verifyOutput) {
+  if (verifyOutput && verifyOutput.trim().startsWith("{")) {
     writeFileSync(join(verifyDir, "standard-json-input.json"), verifyOutput);
     success("Verification JSON generated");
   } else {
     warn("Could not generate verification JSON (non-fatal)");
+    log(`  ${colors.dim}You can generate it manually with:${colors.reset}`);
+    log(`  ${colors.dim}forge verify-contract --show-standard-json-input <address> ${contractName}${colors.reset}`);
   }
 
   info("Copying source files...");

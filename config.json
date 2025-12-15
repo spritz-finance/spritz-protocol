@@ -9,7 +9,7 @@
   },
   "contracts": {
     "SpritzPayCore": {
-      "salt": "0xbadfaceb351045374d7fd1d3915e62501ba9916c009a4573d5a53c4f001a7dda"
+      "salt": "0xbadfaceb351045374d7fd1d3915e62501ba9916c00a4f2755e904c6f005ce60c"
     },
     "SpritzRouter": {
       "salt": "0xbadfaceb351045374d7fd1d3915e62501ba9916c009a4573d5a53c4f001a7ddb",
@@ -22,6 +22,24 @@
     "ParaSwapModule": {
       "salt": "0xbadfaceb351045374d7fd1d3915e62501ba9916c000000000000000000000002",
       "args": ["${chain.paraSwapRegistry}", "${chain.weth}"]
+    }
+  },
+  "environments": {
+    "sandbox": {
+      "contracts": {
+        "SpritzPayCore": {
+          "salt": "0xbadfaceb351045374d7fd1d3915e62501ba9916c0089a6794af580cbf4a3df8f"
+        },
+        "SpritzRouter": {
+          "salt": "0xbadfaceb351045374d7fd1d3915e62501ba9916c0047e7f191b783c6a41ef882"
+        },
+        "OpenOceanModule": {
+          "salt": "0xbadfaceb351045374d7fd1d3915e62501ba9916c000fdcea1c6c752033ad4a7e"
+        },
+        "ParaSwapModule": {
+          "salt": "0xbadfaceb351045374d7fd1d3915e62501ba9916c005beff0e7237afa209e2f46"
+        }
+      }
     }
   },
   "etherscan": {
@@ -116,12 +134,33 @@
       "chainId": 999,
       "rpc": "https://hyperliquid-mainnet.g.alchemy.com/v2/${RPC_KEY}",
       "explorer": "https://hyperevmscan.io",
-      "etherscanApi": "https://api.hyperevmscan.io/api"
+      "etherscanApi": "https://api.hyperevmscan.io/api",
+      "addresses": {
+        "weth": "0x5555555555555555555555555555555555555555",
+        "openOcean": "0x6352a56caadC4F1E25CD6c75970Fa768A3304e64"
+      }
+    },
+    "hyperevm-testnet": {
+      "chainId": 998,
+      "rpc": "https://hyperliquid-testnet.g.alchemy.com/v2/${RPC_KEY}",
+      "explorer": "https://hyperevmscan.io",
+      "etherscanApi": "https://api.hyperevmscan.io/api",
+      "testnet": true,
+      "addresses": {
+        "weth": "0x5555555555555555555555555555555555555555",
+        "openOcean": "0x6352a56caadC4F1E25CD6c75970Fa768A3304e64"
+      }
     },
     "monad": {
       "chainId": 143,
       "rpc": "https://monad-mainnet.g.alchemy.com/v2/${RPC_KEY}",
       "explorer": "https://monadvision.com/"
+    },
+    "monad-testnet": {
+      "chainId": 10143,
+      "rpc": "https://monad-testnet.g.alchemy.com/v2/${RPC_KEY}",
+      "explorer": "https://monadvision.com/",
+      "testnet": true
     },
     "sepolia": {
       "chainId": 11155111,

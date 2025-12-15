@@ -18,10 +18,13 @@ import { join } from "path";
 import { buildChains, listChainNames, type Chain } from "./lib/chains";
 import {
   applyEnvOverrides,
+  filterEnvArg,
   getContractConfig,
   getContractNames,
   loadConfig,
+  parseEnvironmentArg,
   type Config,
+  type Environment,
 } from "./lib/config";
 import { colors, error, info, log, success, warn } from "./lib/console";
 import {
@@ -41,7 +44,9 @@ interface DeploymentRecord {
   deployer: string;
   address: string;
   salt: string;
+  environment: Environment;
   chains: string[];
+  constructorArgs?: string[];
 }
 
 interface Metadata {
@@ -210,7 +215,9 @@ function addDeploymentRecord(
   deployer: string,
   address: string,
   salt: string,
+  environment: Environment,
   chainName: string,
+  constructorArgs?: string[],
 ): boolean {
   const metadataPath = join(DEPLOYMENTS_DIR, contractName, "metadata.json");
   const metadata = getDeploymentMetadata(contractName);
@@ -223,8 +230,9 @@ function addDeploymentRecord(
     metadata.deployments = [];
   }
 
+  // Find deployment matching both salt AND environment
   let deployment = metadata.deployments.find(
-    (d) => d.salt.toLowerCase() === salt.toLowerCase(),
+    (d) => d.salt.toLowerCase() === salt.toLowerCase() && d.environment === environment,
   );
 
   if (deployment) {
@@ -233,13 +241,18 @@ function addDeploymentRecord(
     }
   } else {
     const id = randomUUID();
-    metadata.deployments.push({
+    const record: DeploymentRecord = {
       id,
       deployer,
       address,
       salt,
+      environment,
       chains: [chainName],
-    });
+    };
+    if (constructorArgs && constructorArgs.length > 0) {
+      record.constructorArgs = constructorArgs;
+    }
+    metadata.deployments.push(record);
   }
 
   writeFileSync(metadataPath, JSON.stringify(metadata, null, 2));
@@ -523,6 +536,7 @@ function deploy(
   chains: Record<string, Chain>,
   contractName: string,
   chainName: string,
+  environment: Environment,
   broadcast: boolean = false,
 ): void {
   const chain = chains[chainName];
@@ -698,7 +712,9 @@ function deploy(
     config.deployer.address,
     preflight.address,
     contractConfig.salt,
+    environment,
     chainName,
+    args.length > 0 ? args : undefined,
   );
   success("Deployment recorded");
 
@@ -727,6 +743,7 @@ function recordDeployment(
   chains: Record<string, Chain>,
   contractName: string,
   chainName: string,
+  environment: Environment,
 ): void {
   const chain = chains[chainName];
   if (!chain) {
@@ -741,7 +758,7 @@ function recordDeployment(
   }
 
   log("");
-  info(`Recording ${contractName} deployment on ${chainName}...`);
+  info(`Recording ${contractName} deployment on ${chainName} (${environment})...`);
 
   const address = getContractAddress(config, contractName)!;
 
@@ -753,12 +770,16 @@ function recordDeployment(
   }
   success("Contract found on-chain");
 
+  const args = resolveConstructorArgs(config, contractName, chainName);
+
   addDeploymentRecord(
     contractName,
     config.deployer.address,
     address,
     contractConfig.salt,
+    environment,
     chainName,
+    args.length > 0 ? args : undefined,
   );
   success(`Recorded ${contractName} at ${address} on ${chainName}`);
   log("");
@@ -849,18 +870,27 @@ function printUsage(): void {
   );
   log(`      Verify contract on block explorer`);
   log("");
+  log(`${colors.bold}Options:${colors.reset}`);
+  log("");
+  log(`  ${colors.green}--env <environment>${colors.reset}`);
+  log(`      Use environment-specific salts (production | sandbox)`);
+  log(`      Default: production`);
+  log("");
   log(`${colors.bold}Examples:${colors.reset}`);
   log(
-    `  ${colors.dim}bun deployment SpritzPayCore base${colors.reset}              # Simulate`,
+    `  ${colors.dim}bun deployment SpritzPayCore base${colors.reset}              # Simulate (production)`,
   );
   log(
-    `  ${colors.dim}bun deployment SpritzPayCore base --broadcast${colors.reset}  # Deploy`,
+    `  ${colors.dim}bun deployment SpritzPayCore base --broadcast${colors.reset}  # Deploy (production)`,
   );
   log(
-    `  ${colors.dim}bun deployment SpritzRouter base --broadcast${colors.reset}   # Deploy (auto-resolves Core)`,
+    `  ${colors.dim}bun deployment SpritzPayCore base --env sandbox${colors.reset} # Simulate (sandbox)`,
   );
   log(
     `  ${colors.dim}bun deployment --address SpritzRouter${colors.reset}          # Show address`,
+  );
+  log(
+    `  ${colors.dim}bun deployment --address SpritzRouter --env sandbox${colors.reset}`,
   );
   log(
     `  ${colors.dim}bun deployment --verify SpritzPayCore base${colors.reset}     # Verify`,
@@ -881,11 +911,13 @@ function printUsage(): void {
 }
 
 function main(): void {
-  const args = process.argv.slice(2);
+  const rawArgs = process.argv.slice(2);
+  const environment = parseEnvironmentArg(rawArgs);
+  const args = filterEnvArg(rawArgs);
 
   const env = loadEnv();
   const saltOverrides = loadContractSaltOverrides();
-  const baseConfig = loadConfig();
+  const baseConfig = loadConfig({ environment });
   const { config, warnings } = applyEnvOverrides(baseConfig, {
     DEPLOYER_ADDRESS: env.DEPLOYER_ADDRESS,
     DEPLOYER_KEY_REF: env.DEPLOYER_KEY_REF,
@@ -894,6 +926,10 @@ function main(): void {
 
   for (const warning of warnings) {
     warn(warning);
+  }
+
+  if (environment !== "production") {
+    info(`Using ${environment} environment`);
   }
 
   const chains = buildChains(config, env.RPC_KEY ?? "");
@@ -933,7 +969,7 @@ function main(): void {
       log(`  Usage: bun deployment --record <Contract> <chain>`);
       process.exit(1);
     }
-    recordDeployment(config, chains, contractName, chainName);
+    recordDeployment(config, chains, contractName, chainName, environment);
     process.exit(0);
   }
 
@@ -966,7 +1002,7 @@ function main(): void {
 
   const broadcast = args.includes("--broadcast") || args.includes("-b");
 
-  deploy(config, env, chains, contractName, chainName, broadcast);
+  deploy(config, env, chains, contractName, chainName, environment, broadcast);
 }
 
 main();

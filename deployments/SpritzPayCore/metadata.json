@@ -1,7 +1,7 @@
 {
   "contract": "SpritzPayCore",
-  "frozenAt": "2025-12-08T14:33:00.285Z",
-  "gitCommit": "e41edaa13d956f80d0cfe3c467f541a69a34f1f3",
+  "frozenAt": "2025-12-09T10:20:01.680Z",
+  "gitCommit": "f19d6c1eccf9cf83d92e03c7ede5386e6f2de72a",
   "gitBranch": "main",
   "compiler": {
     "solc": "0.8.30",

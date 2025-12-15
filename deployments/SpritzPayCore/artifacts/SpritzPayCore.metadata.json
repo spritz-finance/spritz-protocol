@@ -401,9 +401,6 @@
         "completeOwnershipHandover(address)": {
           "details": "Allows the owner to complete the two-step ownership handover to `pendingOwner`. Reverts if there is no existing ownership handover requested by `pendingOwner`."
         },
-        "constructor": {
-          "details": "Constructor is payable to save gas on deployment"
-        },
         "initialize(address)": {
           "details": "Can only be called once. Separate from constructor to support CREATE3 deployment.",
           "params": {
@@ -554,10 +551,10 @@
       "license": "MIT"
     },
     "src/SpritzPayCore.sol": {
-      "keccak256": "0x66b6dbbdce7f3904386cdc24fde6f3f348f430af0fa82898ed8379be5b5d7c9b",
+      "keccak256": "0x5b31ba894e21613db385e60077b93834f9abad8ca85861365ff53b9f41701f94",
       "urls": [
-        "bzz-raw://164568104d9eaf8bbdcad76d5fbf97ad0a2e33000a05e306bbb0f9d9f64c8948",
-        "dweb:/ipfs/QmYGY5wRQ2Tdvih6RQVx1ihTQxauphxcNJAXyu12kwN885"
+        "bzz-raw://4224b0bca14f229a1966c76216d039eb6f6bf4c91e79e5c64b96256782ec4161",
+        "dweb:/ipfs/Qmau6E3DEisNVZUbuU5o9R3racrNCf62Gq5gg2uU5HuQDT"
       ],
       "license": "MIT"
     }
